@@ -12,8 +12,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
@@ -53,6 +56,7 @@ fun MapScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
 
     // Launcher pentru permisiunea de locatie
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -494,6 +498,19 @@ fun MapScreen(
         }
 
         // --- OVERLAY INTERFACE ELEMENTS ---
+
+        if (state.baraEsteFocusata) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        focusManager.clearFocus()
+                    }
+            )
+        }
 
         // Bara de cautare
         SearchBar(
