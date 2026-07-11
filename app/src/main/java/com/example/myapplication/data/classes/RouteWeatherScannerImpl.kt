@@ -14,18 +14,26 @@ import kotlinx.coroutines.withContext
 
 class RouteWeatherScannerImpl(private val weatherRepository: IWeatherRepository) : IRouteWeatherScanner {
 
-    override suspend fun scanWeather(route: LineString): List<AlertaMeteo> {
+    override suspend fun scanWeather(route: LineString, durationSeconds: Double): List<AlertaMeteo> {
         val distantaTotala = TurfMeasurement.length(route, TurfConstants.UNIT_METERS)
         val pasMetri = getStepDistance(distantaTotala)
         var distantaCurenta = 0.0
+        val timpPlecareMs = System.currentTimeMillis()
+        val vitezaMetriPeSecunda = if (durationSeconds > 0) distantaTotala / durationSeconds else 1.0
         val listaAlerteGasite = mutableListOf<AlertaMeteo>()
 
         withContext(Dispatchers.IO) {
             val joburi = mutableListOf<Deferred<AlertaMeteo?>>()
             while (distantaCurenta <= distantaTotala) {
                 val punctScanat = TurfMeasurement.along(route, distantaCurenta, TurfConstants.UNIT_METERS)
+                val secundePanaAici = distantaCurenta / vitezaMetriPeSecunda
+                val timpSosireAiciMs = timpPlecareMs + (secundePanaAici * 1000).toLong()
+                val minDeLaPlecare = (secundePanaAici / 60.0).toInt()
+
                 val job = async {
-                    weatherRepository.checkWeatherForPoint(punctScanat)
+                    weatherRepository.checkWeatherForPoint(punctScanat, timpSosireAiciMs)?.copy(
+                        minuteDeLaPlecare = minDeLaPlecare
+                    )
                 }
                 joburi.add(job)
                 distantaCurenta += pasMetri
@@ -67,7 +75,8 @@ class RouteWeatherScannerImpl(private val weatherRepository: IWeatherRepository)
                         val p2 = TurfMeasurement.destination(punct, 30000.0, unghiLinie + 180.0, TurfConstants.UNIT_METERS)
                         val linieScurta = LineString.fromLngLats(listOf(p1, p2))
 
-                        listaAlerteNoapte.add(AlertaMeteo(punct, stadiuNou, "Aici începe: $stadiuNou", linieScurta))
+                        val minDeLaPlecare = (secundePanaAici / 60.0).toInt()
+                        listaAlerteNoapte.add(AlertaMeteo(punct, stadiuNou, "Aici începe: $stadiuNou", linieScurta, minDeLaPlecare))
                     }
                 }
 

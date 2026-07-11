@@ -7,5 +7,6 @@ data class AlertaMeteo(
     val punct: Point,
     val tip: String,
     val mesaj: String,
-    val linieTranzitie: LineString? = null
+    val linieTranzitie: LineString? = null,
+    val minuteDeLaPlecare: Int? = null
 )

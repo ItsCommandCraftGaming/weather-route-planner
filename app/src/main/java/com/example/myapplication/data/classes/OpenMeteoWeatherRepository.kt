@@ -23,19 +23,48 @@ class OpenMeteoWeatherRepository : IWeatherRepository {
         }
     }
 
-    override suspend fun checkWeatherForPoint(point: Point): AlertaMeteo? {
+    override suspend fun checkWeatherForPoint(point: Point, timeMs: Long): AlertaMeteo? {
         val lat = point.latitude()
         val lon = point.longitude()
         return try {
-            val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=precipitation,snowfall,visibility,cloud_cover"
+            val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&hourly=precipitation,snowfall,visibility,cloud_cover&timezone=GMT"
             val response = URL(url).readText()
             val jsonObject = JSONObject(response)
-            val current = jsonObject.getJSONObject("current")
+            val hourly = jsonObject.getJSONObject("hourly")
 
-            val precipitatii = current.optDouble("precipitation", 0.0)
-            val ninsoare = current.optDouble("snowfall", 0.0)
-            val vizibilitate = current.optDouble("visibility", 10000.0)
-            val nori = current.optInt("cloud_cover", 0)
+            val times = hourly.getJSONArray("time")
+            val precipitatiiArray = hourly.getJSONArray("precipitation")
+            val ninsoareArray = hourly.getJSONArray("snowfall")
+            val vizibilitateArray = hourly.getJSONArray("visibility")
+            val noriArray = hourly.getJSONArray("cloud_cover")
+
+            // Găsim cel mai apropiat index orar pentru momentul sosirii (timeMs)
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("GMT")
+            }
+
+            var bestIndex = 0
+            var minDiff = Long.MAX_VALUE
+            for (i in 0 until times.length()) {
+                val timeStr = times.getString(i)
+                try {
+                    val date = sdf.parse(timeStr)
+                    if (date != null) {
+                        val diff = kotlin.math.abs(date.time - timeMs)
+                        if (diff < minDiff) {
+                            minDiff = diff
+                            bestIndex = i
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Ignoră erorile de parsare
+                }
+            }
+
+            val precipitatii = precipitatiiArray.optDouble(bestIndex, 0.0)
+            val ninsoare = ninsoareArray.optDouble(bestIndex, 0.0)
+            val vizibilitate = vizibilitateArray.optDouble(bestIndex, 10000.0)
+            val nori = noriArray.optInt(bestIndex, 0)
 
             when {
                 ninsoare > 0.0 -> AlertaMeteo(point, "Zăpadă", "Ninsoare")

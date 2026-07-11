@@ -126,10 +126,10 @@ fun MapScreen(
     }
 
     // 5. LOGICA PENTRU SCANARE METEO COMPLETĂ
-    LaunchedEffect(state.traseuGeoJson) {
+    LaunchedEffect(state.traseuGeoJson, state.durataTraseuSecunde) {
         val traseuSigur = state.traseuGeoJson
-        if (traseuSigur != null) {
-            state.alerteMeteo = state.routeWeatherScanner.scanWeather(traseuSigur)
+        if (traseuSigur != null && state.durataTraseuSecunde > 0) {
+            state.alerteMeteo = state.routeWeatherScanner.scanWeather(traseuSigur, state.durataTraseuSecunde)
             if (state.alerteMeteo.isNotEmpty()) {
                 Toast.makeText(context, "Atenție! S-au detectat condiții meteo pe traseu!", Toast.LENGTH_LONG).show()
             } else {
@@ -417,6 +417,12 @@ fun MapScreen(
                     else -> Color.Black to Icons.Default.Warning
                 }
 
+                val textAfisat = if (alerta.minuteDeLaPlecare != null) {
+                    "${alerta.mesaj} (în ${alerta.minuteDeLaPlecare} min)"
+                } else {
+                    alerta.mesaj
+                }
+
                 ViewAnnotation(
                     options = viewAnnotationOptions {
                         geometry(alerta.punct)
@@ -425,7 +431,7 @@ fun MapScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = alerta.mesaj,
+                            text = textAfisat,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier
@@ -434,7 +440,7 @@ fun MapScreen(
                         )
                         Icon(
                             imageVector = iconitaAlesa,
-                            contentDescription = alerta.mesaj,
+                            contentDescription = textAfisat,
                             tint = culoareFundal,
                             modifier = Modifier.size(36.dp)
                         )
@@ -452,6 +458,12 @@ fun MapScreen(
                     else                     -> Color.DarkGray to Icons.Default.WbTwilight
                 }
 
+                val textAfisat = if (alerta.minuteDeLaPlecare != null) {
+                    "${alerta.mesaj} (în ${alerta.minuteDeLaPlecare} min)"
+                } else {
+                    alerta.mesaj
+                }
+
                 ViewAnnotation(
                     options = viewAnnotationOptions {
                         geometry(alerta.punct)
@@ -460,7 +472,7 @@ fun MapScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = alerta.mesaj,
+                            text = textAfisat,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier
@@ -469,7 +481,7 @@ fun MapScreen(
                         )
                         Icon(
                             imageVector = iconitaAlesa,
-                            contentDescription = alerta.mesaj,
+                            contentDescription = textAfisat,
                             tint = culoareFundal,
                             modifier = Modifier.size(32.dp)
                         )
