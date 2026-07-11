@@ -64,6 +64,11 @@ class MapState(
 
     var alerteMeteo by mutableStateOf<List<AlertaMeteo>>(emptyList())
     var alerteNoapte by mutableStateOf<List<AlertaMeteo>>(emptyList())
+    var modScrubbingActiv by mutableStateOf(false)
+    var valoareScrubbingSecunde by mutableStateOf(0.0)
+    var puncteVremeTraseu by mutableStateOf<List<AlertaMeteo>>(emptyList())
+    var radarFrames by mutableStateOf<List<RadarFrame>>(emptyList())
+    var activeRadarUrl by mutableStateOf<String?>(null)
 
     var textCautat by mutableStateOf("")
     var istoricCautari by mutableStateOf(searchHistoryRepository.getHistory())
@@ -203,6 +208,10 @@ class MapState(
         alerteMeteo = emptyList()
         alerteNoapte = emptyList()
         textCautat = ""
+        modScrubbingActiv = false
+        valoareScrubbingSecunde = 0.0
+        puncteVremeTraseu = emptyList()
+        activeRadarUrl = radarFrames.lastOrNull()?.url
     }
 }
 

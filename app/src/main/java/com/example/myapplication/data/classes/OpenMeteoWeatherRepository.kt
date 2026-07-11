@@ -1,6 +1,7 @@
 package com.example.myapplication.data.classes
 
 import com.example.myapplication.data.interfaces.IWeatherRepository
+import com.example.myapplication.data.interfaces.RadarFrame
 import com.example.myapplication.model.AlertaMeteo
 import com.mapbox.geojson.Point
 import org.json.JSONObject
@@ -20,6 +21,28 @@ class OpenMeteoWeatherRepository : IWeatherRepository {
         } catch (e: Exception) {
             e.printStackTrace()
             null
+        }
+    }
+
+    override suspend fun getRainViewerFrames(): List<RadarFrame> {
+        return try {
+            val responseJson = URL("https://api.rainviewer.com/public/weather-maps.json").readText()
+            val jsonObject = JSONObject(responseJson)
+            val host = jsonObject.getString("host")
+            val pastArray = jsonObject.getJSONObject("radar").getJSONArray("past")
+            
+            val list = mutableListOf<RadarFrame>()
+            for (i in 0 until pastArray.length()) {
+                val frameObj = pastArray.getJSONObject(i)
+                val time = frameObj.getLong("time")
+                val path = frameObj.getString("path")
+                val url = "$host$path/256/{z}/{x}/{y}/2/1_1.png"
+                list.add(RadarFrame(time, url))
+            }
+            list
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
         }
     }
 
@@ -71,7 +94,8 @@ class OpenMeteoWeatherRepository : IWeatherRepository {
                 precipitatii > 0.0 -> AlertaMeteo(point, "Ploaie", "Ploaie")
                 vizibilitate < 2000.0 -> AlertaMeteo(point, "Ceață", "Ceață")
                 nori > 85 -> AlertaMeteo(point, "Nori", "Nori denși")
-                else -> null
+                nori > 20 -> AlertaMeteo(point, "Nori parțiali", "Nori parțiali")
+                else -> AlertaMeteo(point, "Cer senin", "Cer senin")
             }
         } catch (e: Exception) {
             null

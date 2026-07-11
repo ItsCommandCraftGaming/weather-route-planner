@@ -44,6 +44,7 @@ import com.mapbox.maps.extension.style.layers.generated.lineLayer
 import com.mapbox.maps.extension.style.layers.properties.generated.LineCap
 import com.mapbox.maps.extension.style.layers.properties.generated.LineJoin
 import com.mapbox.turf.TurfConstants
+import com.mapbox.turf.TurfMeasurement
 import com.mapbox.turf.TurfTransformation
 import com.mapbox.maps.extension.style.layers.generated.fillLayer
 import com.mapbox.maps.extension.style.sources.getSourceAs
@@ -79,6 +80,33 @@ fun MapScreen(
             state.umbraAstro = SunCalculator.calculeazaUmbra(-12.0)    // Crepuscul Astronomic
             state.umbraNoapte = SunCalculator.calculeazaUmbra(-18.0)   // Noapte deplină
             delay(15_000L)
+        }
+    }
+
+    // 1b. Preluare cadre radar trecute (RainViewer)
+    LaunchedEffect(Unit) {
+        state.scope.launch(Dispatchers.IO) {
+            val frames = state.weatherRepository.getRainViewerFrames()
+            withContext(Dispatchers.Main) {
+                state.radarFrames = frames
+                state.activeRadarUrl = frames.lastOrNull()?.url
+            }
+        }
+    }
+
+    // 1c. Actualizare cadru radar activ în funcție de slider-ul din trecut
+    LaunchedEffect(state.valoareScrubbingSecunde, state.radarFrames, state.modScrubbingActiv) {
+        val frames = state.radarFrames
+        if (frames.isNotEmpty()) {
+            if (state.modScrubbingActiv && state.valoareScrubbingSecunde < 0) {
+                // Găsim cadrul cel mai apropiat în trecut
+                val targetTimeMs = System.currentTimeMillis() + (state.valoareScrubbingSecunde * 1000).toLong()
+                val closestFrame = frames.minByOrNull { kotlin.math.abs(it.time * 1000 - targetTimeMs) }
+                state.activeRadarUrl = closestFrame?.url
+            } else {
+                // În viitor sau la momentul curent, afișăm cel mai recent radar (prezent)
+                state.activeRadarUrl = frames.lastOrNull()?.url
+            }
         }
     }
 
@@ -129,7 +157,9 @@ fun MapScreen(
     LaunchedEffect(state.traseuGeoJson, state.durataTraseuSecunde) {
         val traseuSigur = state.traseuGeoJson
         if (traseuSigur != null && state.durataTraseuSecunde > 0) {
-            state.alerteMeteo = state.routeWeatherScanner.scanWeather(traseuSigur, state.durataTraseuSecunde)
+            val totTraseul = state.routeWeatherScanner.scanWeather(traseuSigur, state.durataTraseuSecunde)
+            state.puncteVremeTraseu = totTraseul
+            state.alerteMeteo = totTraseul.filter { it.tip != "Cer senin" && it.tip != "Nori parțiali" }
             if (state.alerteMeteo.isNotEmpty()) {
                 Toast.makeText(context, "Atenție! S-au detectat condiții meteo pe traseu!", Toast.LENGTH_LONG).show()
             } else {
@@ -148,6 +178,45 @@ fun MapScreen(
         }
     }
 
+    val pozitieScrubbing = remember(state.traseuGeoJson, state.valoareScrubbingSecunde, state.durataTraseuSecunde) {
+        val traseu = state.traseuGeoJson
+        if (traseu != null && state.durataTraseuSecunde > 0) {
+            val distantaTotala = TurfMeasurement.length(traseu, TurfConstants.UNIT_METERS)
+            val secundeCurente = if (state.valoareScrubbingSecunde < 0.0) 0.0 else state.valoareScrubbingSecunde
+            val fractie = secundeCurente / state.durataTraseuSecunde
+            val distantaCurenta = fractie * distantaTotala
+            TurfMeasurement.along(traseu, distantaCurenta, TurfConstants.UNIT_METERS)
+        } else {
+            null
+        }
+    }
+
+    val weatherInfoScrubbing = remember(state.puncteVremeTraseu, state.valoareScrubbingSecunde) {
+        if (state.puncteVremeTraseu.isNotEmpty()) {
+            val minuteScrubbing = (state.valoareScrubbingSecunde / 60.0).toInt()
+            state.puncteVremeTraseu.minByOrNull { kotlin.math.abs((it.minuteDeLaPlecare ?: 0) - minuteScrubbing) }
+        } else {
+            null
+        }
+    }
+
+    val fazaLuminaScrubbing = remember(pozitieScrubbing, state.valoareScrubbingSecunde) {
+        val punct = pozitieScrubbing
+        if (punct != null) {
+            val timpSosireAiciMs = System.currentTimeMillis() + (state.valoareScrubbingSecunde * 1000).toLong()
+            val altitudine = SunCalculator.calculeazaAltitudineSoareViitor(punct.latitude(), punct.longitude(), timpSosireAiciMs)
+            when {
+                altitudine > 0.0 -> "Ziua"
+                altitudine in -6.0..0.0 -> "Apus / Crepuscul Civil"
+                altitudine in -12.0..-6.0 -> "Crepuscul Nautic"
+                altitudine in -18.0..-12.0 -> "Crepuscul Astronomic"
+                else -> "Noapte Deplină"
+            }
+        } else {
+            ""
+        }
+    }
+
     val currentZoom = state.mapViewportState.cameraState?.zoom ?: 0.0
     val isFlat = currentZoom >= 3.0
 
@@ -157,6 +226,7 @@ fun MapScreen(
             mapViewportState = state.mapViewportState,
         ) {
             // Efect pentru setup si RainViewer
+            // Efect pentru setup si locatia mea
             MapEffect(Unit) { mapView ->
                 mapView.location.updateSettings {
                     enabled = true
@@ -166,34 +236,34 @@ fun MapScreen(
                 mapView.location.addOnIndicatorPositionChangedListener { punctNou ->
                     state.locatieCurenta = punctNou
                 }
+            }
 
-                mapView.getMapboxMap().loadStyleUri(Style.MAPBOX_STREETS) { style ->
-                    state.scope.launch(Dispatchers.IO) {
-                        val urlRainViewer = state.weatherRepository.getRainViewerUrl()
-                        if (urlRainViewer != null) {
-                            withContext(Dispatchers.Main) {
-                                val sursaVreme = rasterSource("sursa-ploaie") {
-                                    tiles(listOf(urlRainViewer))
-                                    tileSize(256)
-                                    maxzoom(6)
-                                }
+            // Efect pentru RainViewer (radar dinamic cu istoric si prezent)
+            MapEffect(state.activeRadarUrl) { mapView ->
+                val style = mapView.getMapboxMap().getStyle()
+                val url = state.activeRadarUrl
+                if (style != null && url != null) {
+                    val sursaId = "sursa-ploaie"
+                    val stratId = "strat-ploaie"
 
-                                if (style.styleSourceExists("sursa-ploaie")) {
-                                    style.removeStyleSource("sursa-ploaie")
-                                }
-                                style.addSource(sursaVreme)
-
-                                val stratVreme = rasterLayer("strat-ploaie", "sursa-ploaie") {
-                                    rasterOpacity(0.8)
-                                }
-
-                                if (style.styleLayerExists("strat-ploaie")) {
-                                    style.removeStyleLayer("strat-ploaie")
-                                }
-                                style.addLayer(stratVreme)
-                            }
-                        }
+                    if (style.styleLayerExists(stratId)) {
+                        style.removeStyleLayer(stratId)
                     }
+                    if (style.styleSourceExists(sursaId)) {
+                        style.removeStyleSource(sursaId)
+                    }
+
+                    val sursaVreme = rasterSource(sursaId) {
+                        tiles(listOf(url))
+                        tileSize(256)
+                        maxzoom(6)
+                    }
+                    style.addSource(sursaVreme)
+
+                    val stratVreme = rasterLayer(stratId, sursaId) {
+                        rasterOpacity(0.8)
+                    }
+                    style.addLayer(stratVreme)
                 }
             }
 
@@ -507,6 +577,65 @@ fun MapScreen(
                     )
                 }
             }
+
+            // Pin pentru pozitia simulata in modul scrubbing/slider
+            if (state.modScrubbingActiv && pozitieScrubbing != null) {
+                ViewAnnotation(
+                    options = viewAnnotationOptions {
+                        geometry(pozitieScrubbing)
+                        allowOverlap(true)
+                    }
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color.DarkGray.copy(alpha = 0.9f)),
+                            shape = RoundedCornerShape(8.dp),
+                            elevation = CardDefaults.cardElevation(4.dp),
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                val tipVreme = weatherInfoScrubbing?.tip ?: "Cer senin"
+                                val emojiVreme = when (tipVreme) {
+                                    "Ploaie" -> "🌧️"
+                                    "Zăpadă" -> "❄️"
+                                    "Ceață" -> "🌫️"
+                                    "Nori" -> "☁️"
+                                    "Nori parțiali" -> "⛅"
+                                    else -> "☀️"
+                                }
+                                val emojiLumina = when {
+                                    fazaLuminaScrubbing.contains("Ziua") -> "☀️"
+                                    fazaLuminaScrubbing.contains("Apus") -> "🌆"
+                                    fazaLuminaScrubbing.contains("Noapte") -> "🌃"
+                                    else -> "🌙"
+                                }
+
+                                Text(
+                                    text = "$emojiVreme $tipVreme",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = "$emojiLumina $fazaLuminaScrubbing",
+                                    color = Color.LightGray,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+
+                        Icon(
+                            imageVector = Icons.Default.DirectionsCar,
+                            contentDescription = "Pozitie simulată",
+                            tint = Color(0xFF00FFCC),
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                }
+            }
         }
 
         // --- OVERLAY INTERFACE ELEMENTS ---
@@ -583,6 +712,81 @@ fun MapScreen(
             Icon(imageVector = Icons.Default.Timer, contentDescription = "Mod Safe Zone")
         }
 
+        // Buton Preview Traseu / Slider timp viitor
+        if (state.traseuGeoJson != null) {
+            Button(
+                onClick = {
+                    state.modScrubbingActiv = !state.modScrubbingActiv
+                    state.valoareScrubbingSecunde = 0.0
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(bottom = 70.dp, start = 16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (state.modScrubbingActiv) Color(0xFF0080FF) else Color(0xFF4CAF50),
+                    contentColor = Color.White
+                )
+            ) {
+                Icon(
+                    imageVector = if (state.modScrubbingActiv) Icons.Default.Cancel else Icons.Default.DirectionsCar,
+                    contentDescription = "Simulare / Prognoză Traseu"
+                )
+            }
+        }
+
+        // Card cu Slider pentru mod preview
+        if (state.modScrubbingActiv && state.traseuGeoJson != null && state.durataTraseuSecunde > 0) {
+            Card(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 80.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    val textTimpOffset = if (state.valoareScrubbingSecunde < 0.0) {
+                        val absMinute = kotlin.math.abs((state.valoareScrubbingSecunde / 60.0).toInt())
+                        "Istoric radar: -$absMinute min (Mașina la start)"
+                    } else {
+                        val minuteScrubbing = (state.valoareScrubbingSecunde / 60.0).toInt()
+                        val oreScrubbing = minuteScrubbing / 60
+                        val restMinute = minuteScrubbing % 60
+                        if (oreScrubbing > 0) {
+                            "Prognoză peste: $oreScrubbing h $restMinute min"
+                        } else {
+                            "Prognoză peste: $restMinute min"
+                        }
+                    }
+
+                    // Calculăm ora efectivă a sosirii în acel punct (sau din trecut)
+                    val calendar = java.util.Calendar.getInstance()
+                    calendar.add(java.util.Calendar.SECOND, state.valoareScrubbingSecunde.toInt())
+                    val oraFormatata = String.format(java.util.Locale.getDefault(), "%02d:%02d", calendar.get(java.util.Calendar.HOUR_OF_DAY), calendar.get(java.util.Calendar.MINUTE))
+
+                    Text(
+                        text = "$textTimpOffset (Ora: $oraFormatata)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Slider(
+                        value = state.valoareScrubbingSecunde.toFloat(),
+                        onValueChange = { state.valoareScrubbingSecunde = it.toDouble() },
+                        valueRange = -3600f..state.durataTraseuSecunde.toFloat(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+
         // Text Detalii zoom
         if (!isFlat) {
             Text(
@@ -610,6 +814,7 @@ fun MapScreen(
 
         // AFISARE TIMP ESTIMAT / ETA SAU STATUS MASINA
         val textAfisat = when {
+            state.modScrubbingActiv -> null
             state.drivingSimulator.isDrivingModeActive && state.drivingSimulator.statusMasina.isNotEmpty() -> state.drivingSimulator.statusMasina
             state.traseuGeoJson != null && state.durataTraseuSecunde > 0 -> {
                 val minuteTotale = (state.durataTraseuSecunde / 60).toInt()
