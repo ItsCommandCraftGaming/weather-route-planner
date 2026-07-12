@@ -359,6 +359,34 @@ fun MapScreen(
                 }
             }
 
+            // Efect pentru punctul de scrubbing/slider
+            MapEffect(state.modScrubbingActiv, pozitieScrubbing) { mapView ->
+                val style = mapView.getMapboxMap().getStyle()
+                if (style != null && state.modScrubbingActiv && pozitieScrubbing != null) {
+                    val sursaId = "sursa-punct-scrubbing"
+                    val stratId = "strat-punct-scrubbing"
+
+                    if (style.styleSourceExists(sursaId)) {
+                        val sursa = style.getSourceAs<com.mapbox.maps.extension.style.sources.generated.GeoJsonSource>(sursaId)
+                        sursa?.geometry(pozitieScrubbing)
+                    } else {
+                        style.addSource(geoJsonSource(sursaId) {
+                            geometry(pozitieScrubbing)
+                        })
+
+                        style.addLayer(com.mapbox.maps.extension.style.layers.generated.circleLayer(stratId, sursaId) {
+                            circleRadius(8.0)
+                            circleColor(android.graphics.Color.parseColor("#00FFCC"))
+                            circleStrokeWidth(2.0)
+                            circleStrokeColor(android.graphics.Color.BLACK)
+                        })
+                    }
+                } else if (style != null) {
+                    if (style.styleLayerExists("strat-punct-scrubbing")) style.removeStyleLayer("strat-punct-scrubbing")
+                    if (style.styleSourceExists("sursa-punct-scrubbing")) style.removeStyleSource("sursa-punct-scrubbing")
+                }
+            }
+
             // Efect pentru cercul dinamic
             MapEffect(state.safeZoneManager.circleRadiusMeters, state.safeZoneManager.isSafeZoneModeActive, state.pozitiePin) { mapView ->
                 val style = mapView.getMapboxMap().getStyle()
@@ -586,12 +614,14 @@ fun MapScreen(
                         allowOverlap(true)
                     }
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.offset(y = (-28).dp)
+                    ) {
                         Card(
                             colors = CardDefaults.cardColors(containerColor = Color.DarkGray.copy(alpha = 0.9f)),
                             shape = RoundedCornerShape(8.dp),
-                            elevation = CardDefaults.cardElevation(4.dp),
-                            modifier = Modifier.padding(bottom = 4.dp)
+                            elevation = CardDefaults.cardElevation(4.dp)
                         ) {
                             Column(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -626,13 +656,6 @@ fun MapScreen(
                                 )
                             }
                         }
-
-                        Icon(
-                            imageVector = Icons.Default.DirectionsCar,
-                            contentDescription = "Pozitie simulată",
-                            tint = Color(0xFF00FFCC),
-                            modifier = Modifier.size(36.dp)
-                        )
                     }
                 }
             }
