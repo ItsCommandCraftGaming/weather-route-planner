@@ -29,6 +29,7 @@ import com.example.myapplication.ui.state.MapState
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.maps.Style
+import com.mapbox.maps.ViewAnnotationAnchor
 import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.MapboxMap
 import com.mapbox.maps.extension.compose.annotation.ViewAnnotation
@@ -48,6 +49,7 @@ import com.mapbox.turf.TurfMeasurement
 import com.mapbox.turf.TurfTransformation
 import com.mapbox.maps.extension.style.layers.generated.fillLayer
 import com.mapbox.maps.extension.style.sources.getSourceAs
+import com.mapbox.maps.viewannotation.annotationAnchor
 import kotlinx.coroutines.*
 
 @Suppress("COMPOSE_APPLIER_CALL_MISMATCH")
@@ -612,11 +614,13 @@ fun MapScreen(
                     options = viewAnnotationOptions {
                         geometry(pozitieScrubbing)
                         allowOverlap(true)
+                        annotationAnchor {
+                            anchor(ViewAnnotationAnchor.BOTTOM)
+                        }
                     }
                 ) {
                     Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.offset(y = (-28).dp)
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Card(
                             colors = CardDefaults.cardColors(containerColor = Color.DarkGray.copy(alpha = 0.9f)),
@@ -656,6 +660,7 @@ fun MapScreen(
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.height(12.dp))
                     }
                 }
             }
