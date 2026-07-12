@@ -226,6 +226,13 @@ fun MapScreen(
         MapboxMap(
             modifier = Modifier.fillMaxSize(),
             mapViewportState = state.mapViewportState,
+            onMapClickListener = { _ ->
+                if (state.modScrubbingActiv) {
+                    state.modScrubbingActiv = false
+                    state.valoareScrubbingSecunde = 0.0
+                }
+                false
+            }
         ) {
             // Efect pentru setup si RainViewer
             // Efect pentru setup si locatia mea
@@ -796,12 +803,31 @@ fun MapScreen(
                     calendar.add(java.util.Calendar.SECOND, state.valoareScrubbingSecunde.toInt())
                     val oraFormatata = String.format(java.util.Locale.getDefault(), "%02d:%02d", calendar.get(java.util.Calendar.HOUR_OF_DAY), calendar.get(java.util.Calendar.MINUTE))
 
-                    Text(
-                        text = "$textTimpOffset (Ora: $oraFormatata)",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "$textTimpOffset (Ora: $oraFormatata)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = {
+                                state.modScrubbingActiv = false
+                                state.valoareScrubbingSecunde = 0.0
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Închide previzualizare",
+                                tint = Color.Gray
+                            )
+                        }
+                    }
                     
                     Spacer(modifier = Modifier.height(8.dp))
 
