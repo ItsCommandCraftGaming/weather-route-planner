@@ -226,13 +226,6 @@ fun MapScreen(
         MapboxMap(
             modifier = Modifier.fillMaxSize(),
             mapViewportState = state.mapViewportState,
-            onMapClickListener = { _ ->
-                if (state.modScrubbingActiv) {
-                    state.modScrubbingActiv = false
-                    state.valoareScrubbingSecunde = 0.0
-                }
-                false
-            }
         ) {
             // Efect pentru setup si RainViewer
             // Efect pentru setup si locatia mea
