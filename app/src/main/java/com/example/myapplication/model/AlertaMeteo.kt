@@ -8,5 +8,7 @@ data class AlertaMeteo(
     val tip: String,
     val mesaj: String,
     val linieTranzitie: LineString? = null,
-    val minuteDeLaPlecare: Int? = null
+    val minuteDeLaPlecare: Int? = null,
+    val precipitatiiValoare: Double = 0.0,
+    val ninsoareValoare: Double = 0.0
 )

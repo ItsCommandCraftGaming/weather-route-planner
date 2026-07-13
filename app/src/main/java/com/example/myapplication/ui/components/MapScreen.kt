@@ -51,6 +51,20 @@ import com.mapbox.maps.extension.style.layers.generated.fillLayer
 import com.mapbox.maps.extension.style.sources.getSourceAs
 import com.mapbox.maps.viewannotation.annotationAnchor
 import kotlinx.coroutines.*
+import java.util.Locale
+import com.example.myapplication.model.AlertaMeteo
+
+fun getRepresentativeWeather(puncteVreme: List<AlertaMeteo>): String {
+    if (puncteVreme.isEmpty()) return "Cer senin"
+    val priorities = listOf("Zăpadă", "Ceață", "Ploaie", "Nori", "Nori parțiali", "Cer senin")
+    for (type in priorities) {
+        if (puncteVreme.any { it.tip == type }) {
+            return type
+        }
+    }
+    return "Cer senin"
+}
+
 
 @Suppress("COMPOSE_APPLIER_CALL_MISMATCH")
 @Composable
@@ -155,28 +169,15 @@ fun MapScreen(
         }
     }
 
-    // 5. LOGICA PENTRU SCANARE METEO COMPLETĂ
-    LaunchedEffect(state.traseuGeoJson, state.durataTraseuSecunde) {
+    // 5. AFISARE NOTIFICARE VREME LA SCHIMBAREA TRASEULUI
+    LaunchedEffect(state.traseuGeoJson) {
         val traseuSigur = state.traseuGeoJson
-        if (traseuSigur != null && state.durataTraseuSecunde > 0) {
-            val totTraseul = state.routeWeatherScanner.scanWeather(traseuSigur, state.durataTraseuSecunde)
-            state.puncteVremeTraseu = totTraseul
-            state.alerteMeteo = totTraseul.filter { it.tip != "Cer senin" && it.tip != "Nori parțiali" }
+        if (traseuSigur != null) {
             if (state.alerteMeteo.isNotEmpty()) {
                 Toast.makeText(context, "Atenție! S-au detectat condiții meteo pe traseu!", Toast.LENGTH_LONG).show()
             } else {
                 Toast.makeText(context, "Traseu perfect curat, vreme excelentă!", Toast.LENGTH_SHORT).show()
             }
-        }
-    }
-
-    // 6. LOGICA PENTRU SCANARE NOAPTE PE TRASEU
-    LaunchedEffect(state.traseuGeoJson) {
-        val traseuSigur = state.traseuGeoJson
-        if (traseuSigur != null && state.durataTraseuSecunde > 0) {
-            state.alerteNoapte = state.routeWeatherScanner.scanNightTransitions(traseuSigur, state.durataTraseuSecunde)
-        } else {
-            state.alerteNoapte = emptyList()
         }
     }
 
@@ -297,38 +298,63 @@ fun MapScreen(
                 }
             }
 
-            // Efect pentru traseu + auto zoom
-            MapEffect(state.traseuGeoJson) { mapView ->
+            // Efect pentru trasee + auto zoom pe traseul selectat
+            MapEffect(state.toateTraseele, state.indexTraseuSelectat) { mapView ->
                 val style = mapView.getMapboxMap().getStyle()
                 val mapboxMap = mapView.getMapboxMap()
 
                 if (style != null) {
-                    val sursaId = "sursa-traseu"
-                    val stratId = "strat-traseu"
+                    // Mai întâi eliminăm toate straturile și sursele vechi pentru trasee
+                    for (i in 0..5) {
+                        val sursaId = "sursa-traseu-$i"
+                        val stratId = "strat-traseu-$i"
+                        if (style.styleLayerExists(stratId)) style.removeStyleLayer(stratId)
+                        if (style.styleSourceExists(sursaId)) style.removeStyleSource(sursaId)
+                    }
 
-                    if (style.styleLayerExists(stratId)) style.removeStyleLayer(stratId)
-                    if (style.styleSourceExists(sursaId)) style.removeStyleSource(sursaId)
+                    if (state.toateTraseele.isNotEmpty()) {
+                        // Desenăm mai întâi traseele NESELECTATE, ca să fie dedesubt
+                        state.toateTraseele.forEachIndexed { index, traseu ->
+                            if (index != state.indexTraseuSelectat) {
+                                val sursaId = "sursa-traseu-$index"
+                                val stratId = "strat-traseu-$index"
+                                style.addSource(geoJsonSource(sursaId) {
+                                    geometry(traseu.geoJson)
+                                })
+                                style.addLayer(lineLayer(stratId, sursaId) {
+                                    lineColor(android.graphics.Color.parseColor("#9E9E9E"))
+                                    lineWidth(4.5)
+                                    lineCap(LineCap.ROUND)
+                                    lineJoin(LineJoin.ROUND)
+                                })
+                            }
+                        }
 
-                    if (state.traseuGeoJson != null) {
-                        style.addSource(geoJsonSource(sursaId) {
-                            geometry(state.traseuGeoJson!!)
-                        })
+                        // Desenăm apoi traseul SELECTAT, ca să fie deasupra
+                        val selectat = state.toateTraseele.getOrNull(state.indexTraseuSelectat)
+                        if (selectat != null) {
+                            val index = state.indexTraseuSelectat
+                            val sursaId = "sursa-traseu-$index"
+                            val stratId = "strat-traseu-$index"
+                            style.addSource(geoJsonSource(sursaId) {
+                                geometry(selectat.geoJson)
+                            })
+                            style.addLayer(lineLayer(stratId, sursaId) {
+                                lineColor(android.graphics.Color.BLUE)
+                                lineWidth(7.0)
+                                lineCap(LineCap.ROUND)
+                                lineJoin(LineJoin.ROUND)
+                            })
 
-                        style.addLayer(lineLayer(stratId, sursaId) {
-                            lineColor(android.graphics.Color.BLUE)
-                            lineWidth(6.0)
-                            lineCap(LineCap.ROUND)
-                            lineJoin(LineJoin.ROUND)
-                        })
-
-                        val padding = com.mapbox.maps.EdgeInsets(200.0, 100.0, 150.0, 100.0)
-                        val cameraOptions = mapboxMap.cameraForGeometry(
-                            state.traseuGeoJson!!,
-                            padding,
-                            null,
-                            null
-                        )
-                        state.mapViewportState.setCameraOptions(cameraOptions)
+                            val padding = com.mapbox.maps.EdgeInsets(200.0, 100.0, 150.0, 100.0)
+                            val cameraOptions = mapboxMap.cameraForGeometry(
+                                selectat.geoJson,
+                                padding,
+                                null,
+                                null
+                            )
+                            state.mapViewportState.setCameraOptions(cameraOptions)
+                        }
                     }
                 }
             }
@@ -632,32 +658,68 @@ fun MapScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 val tipVreme = weatherInfoScrubbing?.tip ?: "Cer senin"
-                                val emojiVreme = when (tipVreme) {
-                                    "Ploaie" -> "🌧️"
-                                    "Zăpadă" -> "❄️"
-                                    "Ceață" -> "🌫️"
-                                    "Nori" -> "☁️"
-                                    "Nori parțiali" -> "⛅"
-                                    else -> "☀️"
+                                val weatherIcon = when (tipVreme) {
+                                    "Ploaie" -> Icons.Default.WaterDrop
+                                    "Zăpadă" -> Icons.Default.AcUnit
+                                    "Ceață" -> Icons.Default.Warning
+                                    "Nori" -> Icons.Default.Cloud
+                                    "Nori parțiali" -> Icons.Default.Cloud
+                                    else -> Icons.Default.WbSunny
                                 }
-                                val emojiLumina = when {
-                                    fazaLuminaScrubbing.contains("Ziua") -> "☀️"
-                                    fazaLuminaScrubbing.contains("Apus") -> "🌆"
-                                    fazaLuminaScrubbing.contains("Noapte") -> "🌃"
-                                    else -> "🌙"
+                                val weatherColor = when (tipVreme) {
+                                    "Zăpadă" -> Color(0xFF00E5FF)
+                                    "Ceață" -> Color(0xFF9E9E9E)
+                                    "Ploaie" -> Color(0xFF2979FF)
+                                    "Nori" -> Color(0xFF757575)
+                                    "Nori parțiali" -> Color(0xFFFFB300)
+                                    else -> Color(0xFFFFD600)
                                 }
 
-                                Text(
-                                    text = "$emojiVreme $tipVreme",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                Text(
-                                    text = "$emojiLumina $fazaLuminaScrubbing",
-                                    color = Color.LightGray,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                                val lightIcon = when {
+                                    fazaLuminaScrubbing.contains("Ziua") -> Icons.Default.WbSunny
+                                    fazaLuminaScrubbing.contains("Apus") || fazaLuminaScrubbing.contains("Crepuscul Civil") -> Icons.Default.WbTwilight
+                                    else -> Icons.Default.Brightness3
+                                }
+                                val lightColor = when {
+                                    fazaLuminaScrubbing.contains("Ziua") -> Color(0xFFFFD600)
+                                    fazaLuminaScrubbing.contains("Apus") || fazaLuminaScrubbing.contains("Crepuscul Civil") -> Color(0xFFFF9800)
+                                    else -> Color(0xFF3F51B5)
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = weatherIcon,
+                                        contentDescription = null,
+                                        tint = weatherColor,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = tipVreme,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = lightIcon,
+                                        contentDescription = null,
+                                        tint = lightColor,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = fazaLuminaScrubbing,
+                                        color = Color.LightGray,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
                             }
                         }
                         Spacer(modifier = Modifier.height(12.dp))
@@ -681,14 +743,123 @@ fun MapScreen(
             )
         }
 
-        // Bara de cautare
-        SearchBar(
-            state = state,
-            permissionLauncher = {
-                permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-            },
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
+        // Panou Căutare + Rute Alternative
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+        ) {
+            SearchBar(
+                state = state,
+                permissionLauncher = {
+                    permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                }
+            )
+
+            // Afișăm rutele alternative dacă există
+            if (state.toateTraseele.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    state.toateTraseele.forEachIndexed { index, traseu ->
+                        val esteSelectat = index == state.indexTraseuSelectat
+                        
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { state.selecteazaTraseulDirect(index) },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (esteSelectat) Color(0xFF2196F3) else Color.White.copy(alpha = 0.9f)
+                            ),
+                            elevation = CardDefaults.cardElevation(
+                                defaultElevation = if (esteSelectat) 8.dp else 2.dp
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                val tipTraseu = if (index == 0) "Ruta 1" else "Ruta ${index + 1}"
+                                Text(
+                                    text = tipTraseu,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (esteSelectat) Color.White else Color.Black,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                
+                                val distKm = String.format(Locale.US, "%.1f km", traseu.distantaMetri / 1000.0)
+                                val minTotale = (traseu.durataSecunde / 60).toInt()
+                                val ore = minTotale / 60
+                                val min = minTotale % 60
+                                val timpStr = if (ore > 0) "${ore}h ${min}m" else "${min} min"
+                                
+                                Text(
+                                    text = "$distKm • $timpStr",
+                                    color = if (esteSelectat) Color.White.copy(alpha = 0.8f) else Color.Gray,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+
+                                val repVreme = getRepresentativeWeather(traseu.puncteVreme)
+                                val (weatherIcon, weatherColor) = when (repVreme) {
+                                    "Zăpadă" -> Icons.Default.AcUnit to Color(0xFF00E5FF)
+                                    "Ceață" -> Icons.Default.Warning to Color(0xFF9E9E9E)
+                                    "Ploaie" -> Icons.Default.WaterDrop to Color(0xFF2979FF)
+                                    "Nori" -> Icons.Default.Cloud to Color(0xFF757575)
+                                    "Nori parțiali" -> Icons.Default.Cloud to Color(0xFFFFB300)
+                                    else -> Icons.Default.WbSunny to Color(0xFFFFD600)
+                                }
+                                val factorMeteoStr = String.format(Locale.US, "%.2fx", traseu.factorMeteo)
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = weatherIcon,
+                                        contentDescription = repVreme,
+                                        tint = if (esteSelectat) Color.White else weatherColor,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = factorMeteoStr,
+                                        color = if (esteSelectat) Color.White.copy(alpha = 0.9f) else Color.DarkGray,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+
+                                val scorStr = String.format(Locale.US, "Cost: %.1f", traseu.scor)
+                                Text(
+                                    text = scorStr,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (esteSelectat) Color.White else Color(0xFF1976D2),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Formula: Cost = Distanță (km) + (Factor Meteo × Timp (min))",
+                    color = Color.Black,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+        }
 
         // Buton Locatia Mea
         Button(

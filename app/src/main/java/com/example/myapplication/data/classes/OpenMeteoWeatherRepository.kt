@@ -90,8 +90,8 @@ class OpenMeteoWeatherRepository : IWeatherRepository {
             val nori = noriArray.optInt(bestIndex, 0)
 
             when {
-                ninsoare > 0.0 -> AlertaMeteo(point, "Zăpadă", "Ninsoare")
-                precipitatii > 0.0 -> AlertaMeteo(point, "Ploaie", "Ploaie")
+                ninsoare > 0.0 -> AlertaMeteo(point, "Zăpadă", "Ninsoare", ninsoareValoare = ninsoare)
+                precipitatii > 0.0 -> AlertaMeteo(point, "Ploaie", "Ploaie", precipitatiiValoare = precipitatii)
                 vizibilitate < 2000.0 -> AlertaMeteo(point, "Ceață", "Ceață")
                 nori > 85 -> AlertaMeteo(point, "Nori", "Nori denși")
                 nori > 20 -> AlertaMeteo(point, "Nori parțiali", "Nori parțiali")
