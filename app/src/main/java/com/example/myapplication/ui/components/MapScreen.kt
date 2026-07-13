@@ -1,5 +1,6 @@
 package com.example.myapplication.ui.components
 
+import com.example.myapplication.BuildConfig
 import android.Manifest
 import android.content.pm.PackageManager
 import android.util.Log
@@ -119,8 +120,11 @@ fun MapScreen(
                 val targetTimeMs = System.currentTimeMillis() + (state.valoareScrubbingSecunde * 1000).toLong()
                 val closestFrame = frames.minByOrNull { kotlin.math.abs(it.time * 1000 - targetTimeMs) }
                 state.activeRadarUrl = closestFrame?.url
+            } else if (state.modScrubbingActiv && state.valoareScrubbingSecunde > 0) {
+                // În viitor, ascundem radarul RainViewer din trecut/prezent (ca să arătăm norii prognozați)
+                state.activeRadarUrl = null
             } else {
-                // În viitor sau la momentul curent, afișăm cel mai recent radar (prezent)
+                // La momentul curent sau când previzualizarea nu e activă, afișăm radarul curent (prezent)
                 state.activeRadarUrl = frames.lastOrNull()?.url
             }
         }
@@ -220,6 +224,18 @@ fun MapScreen(
         }
     }
 
+    val activeRainbowCloudsUrl = remember(state.valoareScrubbingSecunde, state.rainbowSnapshotTimestamp, state.modScrubbingActiv) {
+        val rainbowKey = BuildConfig.RAINBOW_API_KEY
+        if (state.modScrubbingActiv && state.valoareScrubbingSecunde > 0 && rainbowKey.isNotBlank() && rainbowKey != "your_rainbow_api_key_here" && state.rainbowSnapshotTimestamp != null) {
+            val offsetSec = state.valoareScrubbingSecunde.toLong()
+            val snapshot = state.rainbowSnapshotTimestamp
+            val forecastTime = ((offsetSec / 600) * 600).coerceIn(0, 14400)
+            "https://api.rainbow.ai/tiles/v1/precip/$snapshot/$forecastTime/{z}/{x}/{y}?token=$rainbowKey"
+        } else {
+            null
+        }
+    }
+
     val currentZoom = state.mapViewportState.cameraState?.zoom ?: 0.0
     val isFlat = currentZoom >= 3.0
 
@@ -245,7 +261,7 @@ fun MapScreen(
             MapEffect(state.activeRadarUrl) { mapView ->
                 val style = mapView.getMapboxMap().getStyle()
                 val url = state.activeRadarUrl
-                if (style != null && url != null) {
+                if (style != null) {
                     val sursaId = "sursa-ploaie"
                     val stratId = "strat-ploaie"
 
@@ -256,17 +272,51 @@ fun MapScreen(
                         style.removeStyleSource(sursaId)
                     }
 
-                    val sursaVreme = rasterSource(sursaId) {
-                        tiles(listOf(url))
-                        tileSize(256)
-                        maxzoom(6)
-                    }
-                    style.addSource(sursaVreme)
+                    if (url != null) {
+                        val sursaVreme = rasterSource(sursaId) {
+                            tiles(listOf(url))
+                            tileSize(256)
+                            maxzoom(6)
+                        }
+                        style.addSource(sursaVreme)
 
-                    val stratVreme = rasterLayer(stratId, sursaId) {
-                        rasterOpacity(0.8)
+                        val stratVreme = rasterLayer(stratId, sursaId) {
+                            rasterOpacity(0.8)
+                        }
+                        style.addLayer(stratVreme)
                     }
-                    style.addLayer(stratVreme)
+                }
+            }
+
+            // Efect pentru hărți de nori în viitor (Rainbow.ai)
+            MapEffect(activeRainbowCloudsUrl) { mapView ->
+                val style = mapView.getMapboxMap().getStyle()
+                val url = activeRainbowCloudsUrl
+                android.util.Log.d("WeatherRepository", "activeRainbowCloudsUrl: $url")
+                if (style != null) {
+                    val sursaId = "sursa-nori"
+                    val stratId = "strat-nori"
+
+                    if (style.styleLayerExists(stratId)) {
+                        style.removeStyleLayer(stratId)
+                    }
+                    if (style.styleSourceExists(sursaId)) {
+                        style.removeStyleSource(sursaId)
+                    }
+
+                    if (url != null) {
+                        val sursaNori = rasterSource(sursaId) {
+                            tiles(listOf(url))
+                            tileSize(256)
+                            maxzoom(6)
+                        }
+                        style.addSource(sursaNori)
+
+                        val stratNori = rasterLayer(stratId, sursaId) {
+                            rasterOpacity(0.6)
+                        }
+                        style.addLayer(stratNori)
+                    }
                 }
             }
 
@@ -1001,6 +1051,17 @@ fun MapScreen(
                         valueRange = -3600f..state.durataTraseuSecunde.toFloat(),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    if (state.valoareScrubbingSecunde > 0 && activeRainbowCloudsUrl == null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Pentru a vedea hărțile de nori din viitor, adaugă în local.properties:\n" +
+                                   "• RAINBOW_API_KEY (de pe developer.rainbow.ai - are nowcast gratuit de 4h, cere card)",
+                            color = Color(0xFFD32F2F),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }

@@ -60,6 +60,23 @@ class MapState(
     // Rute alternative si selectie
     var toateTraseele by mutableStateOf<List<TraseuInfo>>(emptyList())
     var indexTraseuSelectat by mutableStateOf(0)
+    var rainbowSnapshotTimestamp by mutableStateOf<Long?>(null)
+
+    init {
+        actualizeazaRainbowSnapshot()
+    }
+
+    fun actualizeazaRainbowSnapshot() {
+        val apiKey = BuildConfig.RAINBOW_API_KEY
+        if (apiKey.isNotBlank() && apiKey != "your_rainbow_api_key_here") {
+            scope.launch(Dispatchers.IO) {
+                val snapshot = weatherRepository.getRainbowSnapshot(apiKey)
+                withContext(Dispatchers.Main) {
+                    rainbowSnapshotTimestamp = snapshot
+                }
+            }
+        }
+    }
 
     // UI States (General)
     var showTimerDialog by mutableStateOf(false)
@@ -157,6 +174,7 @@ class MapState(
     }
 
     fun calculeazaTraseu(start: Point, final: Point) {
+        actualizeazaRainbowSnapshot()
         val routeOptions = RouteOptions.builder()
             .coordinatesList(listOf(start, final))
             .profile(DirectionsCriteria.PROFILE_DRIVING)

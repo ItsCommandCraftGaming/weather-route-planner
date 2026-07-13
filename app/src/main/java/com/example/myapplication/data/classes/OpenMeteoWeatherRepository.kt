@@ -101,4 +101,29 @@ class OpenMeteoWeatherRepository : IWeatherRepository {
             null
         }
     }
+
+    override suspend fun getRainbowSnapshot(apiKey: String): Long? {
+        return try {
+            val url = URL("https://api.rainbow.ai/tiles/v1/snapshot?layer=precip")
+            val connection = url.openConnection() as java.net.HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("Ocp-Apim-Subscription-Key", apiKey)
+            connection.connect()
+
+            val responseCode = connection.responseCode
+            if (responseCode == 200) {
+                val responseJson = connection.inputStream.bufferedReader().use { it.readText() }
+                val jsonObject = org.json.JSONObject(responseJson)
+                val snapshot = jsonObject.getLong("snapshot")
+                android.util.Log.d("WeatherRepository", "Rainbow snapshot success: $snapshot")
+                snapshot
+            } else {
+                android.util.Log.e("WeatherRepository", "Rainbow snapshot failed with HTTP code: $responseCode")
+                null
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("WeatherRepository", "Rainbow snapshot exception: ${e.message}", e)
+            null
+        }
+    }
 }

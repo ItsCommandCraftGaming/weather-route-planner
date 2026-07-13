@@ -12,4 +12,5 @@ interface IWeatherRepository {
     suspend fun getRainViewerUrl(): String?
     suspend fun checkWeatherForPoint(point: Point, timeMs: Long = System.currentTimeMillis()): AlertaMeteo?
     suspend fun getRainViewerFrames(): List<RadarFrame>
+    suspend fun getRainbowSnapshot(apiKey: String): Long?
 }
