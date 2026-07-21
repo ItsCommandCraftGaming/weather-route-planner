@@ -25,7 +25,6 @@ class TomTomIncidentRepositoryImpl : ITomTomIncidentRepository {
         }
 
         return try {
-            // Formatare coordonate cu punct ca separator zecimal (Locale.US)
             val urlString = String.format(
                 Locale.US,
                 "https://api.tomtom.com/traffic/services/5/incidentDetails?key=%s&bbox=%.5f,%.5f,%.5f,%.5f&language=ro-RO",
@@ -95,7 +94,7 @@ class TomTomIncidentRepositoryImpl : ITomTomIncidentRepository {
                     "Incident pe traseu"
                 }
 
-                val (titlu, emoji) = parseCategory(iconCategory)
+                val titlu = parseCategory(iconCategory)
 
                 rezultate.add(
                     TomTomIncident(
@@ -104,8 +103,7 @@ class TomTomIncidentRepositoryImpl : ITomTomIncidentRepository {
                         titlu = titlu,
                         descriere = descriere,
                         locatie = Point.fromLngLat(lon, lat),
-                        intarziereSecunde = delay,
-                        iconitaEmoji = emoji
+                        intarziereSecunde = delay
                     )
                 )
             }
@@ -118,21 +116,21 @@ class TomTomIncidentRepositoryImpl : ITomTomIncidentRepository {
         }
     }
 
-    private fun parseCategory(category: Int): Pair<String, String> {
+    private fun parseCategory(category: Int): String {
         return when (category) {
-            1 -> "Accident rutier" to "🚗💥"
-            2 -> "Ceață" to "🌫️"
-            3 -> "Drum periculos / Alunecos" to "⚠️"
-            4 -> "Ploaie torențială" to "🌧️"
-            5 -> "Gheață / Polei" to "❄️"
-            6 -> "Aglomerație / Dop de trafic" to "🚘"
-            7 -> "Bandă blocată" to "⛔"
-            8 -> "Drum închis" to "🚫"
-            9 -> "Lucrări pe carosabil" to "🚧"
-            10 -> "Inundație" to "🌊"
-            11 -> "Vânt puternic" to "💨"
-            14 -> "Echipaj / Control viteză" to "👮"
-            else -> "Incident în trafic" to "⚠️"
+            1 -> "Accident rutier"
+            2 -> "Ceață"
+            3 -> "Drum periculos / Alunecos"
+            4 -> "Ploaie torențială"
+            5 -> "Gheață / Polei"
+            6 -> "Aglomerație / Dop de trafic"
+            7 -> "Bandă blocată"
+            8 -> "Drum închis"
+            9 -> "Lucrări pe carosabil"
+            10 -> "Inundație"
+            11 -> "Vânt puternic"
+            14 -> "Echipaj / Control viteză"
+            else -> "Incident în trafic"
         }
     }
 }

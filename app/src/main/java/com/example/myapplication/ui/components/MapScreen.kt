@@ -695,35 +695,51 @@ fun MapScreen(
                 }
             }
 
-            // Pin-uri Incidente TomTom
+            // Pin-uri Incidente TomTom cu Vector Icons (Fără Emoji, fără text încărcat)
             state.incidenteTomTom.forEach { incident ->
+                val (culoareCerc, iconita) = when (incident.titlu) {
+                    "Accident rutier" -> Color(0xFFD32F2F) to Icons.Default.Warning
+                    "Lucrări pe carosabil" -> Color(0xFFF57C00) to Icons.Default.Build
+                    "Drum închis", "Bandă blocată" -> Color(0xFFB71C1C) to Icons.Default.Block
+                    "Echipaj / Control viteză" -> Color(0xFF1976D2) to Icons.Default.Shield
+                    "Gheață / Polei", "Zăpadă" -> Color(0xFF0288D1) to Icons.Default.AcUnit
+                    "Ploaie torențială", "Inundație" -> Color(0xFF0288D1) to Icons.Default.WaterDrop
+                    "Aglomerație / Dop de trafic" -> Color(0xFFFBC02D) to Icons.Default.Traffic
+                    else -> Color(0xFFE65100) to Icons.Default.Warning
+                }
+
+                val intarziereMin = incident.intarziereSecunde / 60
+
                 ViewAnnotation(
                     options = viewAnnotationOptions {
                         geometry(incident.locatie)
                         allowOverlap(true)
                     }
                 ) {
-                    val intarziereMin = incident.intarziereSecunde / 60
-                    val textAfisat = if (intarziereMin > 0) {
-                        "${incident.iconitaEmoji} ${incident.titlu} (+$intarziereMin min)"
-                    } else {
-                        "${incident.iconitaEmoji} ${incident.titlu}"
-                    }
-
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.clickable {
-                            Toast.makeText(context, "${incident.titlu}: ${incident.descriere}", Toast.LENGTH_LONG).show()
-                        }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .background(culoareCerc, RoundedCornerShape(20.dp))
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .clickable {
+                                Toast.makeText(context, "${incident.titlu}: ${incident.descriere}", Toast.LENGTH_LONG).show()
+                            }
                     ) {
-                        Text(
-                            text = textAfisat,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .background(Color(0xFFD32F2F).copy(alpha = 0.9f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        Icon(
+                            imageVector = iconita,
+                            contentDescription = incident.titlu,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
                         )
+                        if (intarziereMin > 0) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "+${intarziereMin}m",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     }
                 }
             }

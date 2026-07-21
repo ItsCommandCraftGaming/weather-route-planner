@@ -415,7 +415,7 @@ class MapState(
         return incidente.filter { incident ->
             var minDistanceMeters = Double.MAX_VALUE
             for (coord in coords) {
-                val dist = TurfMeasurement.distance(incident.locatie, coord, TurfConstants.UNIT_METERS)
+                val dist = TurfMeasurement.distance(incident.locatie, coord, "meters")
                 if (dist < minDistanceMeters) {
                     minDistanceMeters = dist
                 }
