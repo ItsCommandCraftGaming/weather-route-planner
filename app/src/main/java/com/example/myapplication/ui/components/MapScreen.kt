@@ -358,8 +358,12 @@ fun MapScreen(
                     for (i in 0..5) {
                         val sursaId = "sursa-traseu-$i"
                         val stratId = "strat-traseu-$i"
+                        val sursaBorduraId = "sursa-traseu-bordura-$i"
+                        val stratBorduraId = "strat-traseu-bordura-$i"
                         if (style.styleLayerExists(stratId)) style.removeStyleLayer(stratId)
                         if (style.styleSourceExists(sursaId)) style.removeStyleSource(sursaId)
+                        if (style.styleLayerExists(stratBorduraId)) style.removeStyleLayer(stratBorduraId)
+                        if (style.styleSourceExists(sursaBorduraId)) style.removeStyleSource(sursaBorduraId)
                     }
 
                     if (state.toateTraseele.isNotEmpty()) {
@@ -380,21 +384,47 @@ fun MapScreen(
                             }
                         }
 
-                        // Desenăm apoi traseul SELECTAT, ca să fie deasupra
+                        // Desenăm apoi traseul SELECTAT cu culori de trafic, ca să fie deasupra
                         val selectat = state.toateTraseele.getOrNull(state.indexTraseuSelectat)
                         if (selectat != null) {
                             val index = state.indexTraseuSelectat
                             val sursaId = "sursa-traseu-$index"
                             val stratId = "strat-traseu-$index"
-                            style.addSource(geoJsonSource(sursaId) {
+                            val sursaBorduraId = "sursa-traseu-bordura-$index"
+                            val stratBorduraId = "strat-traseu-bordura-$index"
+
+                            // Contur/Bordura albastră sub linia de trafic
+                            style.addSource(geoJsonSource(sursaBorduraId) {
                                 geometry(selectat.geoJson)
                             })
-                            style.addLayer(lineLayer(stratId, sursaId) {
-                                lineColor(android.graphics.Color.BLUE)
-                                lineWidth(7.0)
+                            style.addLayer(lineLayer(stratBorduraId, sursaBorduraId) {
+                                lineColor(android.graphics.Color.parseColor("#1565C0"))
+                                lineWidth(9.0)
                                 lineCap(LineCap.ROUND)
                                 lineJoin(LineJoin.ROUND)
                             })
+
+                            if (selectat.traficGeoJson != null) {
+                                style.addSource(geoJsonSource(sursaId) {
+                                    featureCollection(selectat.traficGeoJson)
+                                })
+                                style.addLayer(lineLayer(stratId, sursaId) {
+                                    lineColor(com.mapbox.maps.extension.style.expressions.generated.Expression.get("color"))
+                                    lineWidth(6.0)
+                                    lineCap(LineCap.ROUND)
+                                    lineJoin(LineJoin.ROUND)
+                                })
+                            } else {
+                                style.addSource(geoJsonSource(sursaId) {
+                                    geometry(selectat.geoJson)
+                                })
+                                style.addLayer(lineLayer(stratId, sursaId) {
+                                    lineColor(android.graphics.Color.parseColor("#2196F3"))
+                                    lineWidth(6.0)
+                                    lineCap(LineCap.ROUND)
+                                    lineJoin(LineJoin.ROUND)
+                                })
+                            }
 
                             val padding = com.mapbox.maps.EdgeInsets(200.0, 100.0, 150.0, 100.0)
                             val cameraOptions = mapboxMap.cameraForGeometry(

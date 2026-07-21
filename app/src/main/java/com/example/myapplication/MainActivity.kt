@@ -23,7 +23,7 @@ class MainActivity : ComponentActivity() {
         MapboxOptions.accessToken = BuildConfig.MAPBOX_SECRET_TOKEN
 
         val searchHistoryRepository = SharedPrefsSearchHistoryRepository(applicationContext)
-        val weatherRepository = OpenMeteoWeatherRepository()
+        val weatherRepository = OpenMeteoWeatherRepository(applicationContext)
 
         setContent {
             val mapViewportState = rememberMapViewportState {

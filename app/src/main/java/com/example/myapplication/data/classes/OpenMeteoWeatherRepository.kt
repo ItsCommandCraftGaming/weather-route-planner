@@ -4,10 +4,28 @@ import com.example.myapplication.data.interfaces.IWeatherRepository
 import com.example.myapplication.data.interfaces.RadarFrame
 import com.example.myapplication.model.AlertaMeteo
 import com.mapbox.geojson.Point
+import android.content.Context
 import org.json.JSONObject
 import java.net.URL
 
-class OpenMeteoWeatherRepository : IWeatherRepository {
+class OpenMeteoWeatherRepository(private val context: Context? = null) : IWeatherRepository {
+
+    private var cachedSnapshot: Long? = null
+    private var lastFetchTime: Long = 0L
+
+    private fun getCachedSnapshotFallback(): Long? {
+        if (cachedSnapshot != null) {
+            return cachedSnapshot
+        }
+        context?.let { ctx ->
+            val prefs = ctx.getSharedPreferences("RainbowCachePrefs", Context.MODE_PRIVATE)
+            val savedSnapshot = prefs.getLong("rainbow_snapshot", -1L)
+            if (savedSnapshot != -1L) {
+                return savedSnapshot
+            }
+        }
+        return null
+    }
 
     override suspend fun getRainViewerUrl(): String? {
         return try {
@@ -103,6 +121,29 @@ class OpenMeteoWeatherRepository : IWeatherRepository {
     }
 
     override suspend fun getRainbowSnapshot(apiKey: String): Long? {
+        val currentTime = System.currentTimeMillis()
+
+        // 1. Check memory cache
+        cachedSnapshot?.let { snapshot ->
+            if (currentTime - lastFetchTime < 10 * 60 * 1000) { // 10 minutes
+                android.util.Log.d("WeatherRepository", "Returning cached Rainbow snapshot (memory): $snapshot")
+                return snapshot
+            }
+        }
+
+        // 2. Check SharedPreferences cache
+        context?.let { ctx ->
+            val prefs = ctx.getSharedPreferences("RainbowCachePrefs", Context.MODE_PRIVATE)
+            val savedSnapshot = prefs.getLong("rainbow_snapshot", -1L)
+            val savedFetchTime = prefs.getLong("rainbow_fetch_time", 0L)
+            if (savedSnapshot != -1L && (currentTime - savedFetchTime < 10 * 60 * 1000)) {
+                android.util.Log.d("WeatherRepository", "Returning cached Rainbow snapshot (prefs): $savedSnapshot")
+                cachedSnapshot = savedSnapshot
+                lastFetchTime = savedFetchTime
+                return savedSnapshot
+            }
+        }
+
         return try {
             val url = URL("https://api.rainbow.ai/tiles/v1/snapshot?layer=precip")
             val connection = url.openConnection() as java.net.HttpURLConnection
@@ -116,14 +157,38 @@ class OpenMeteoWeatherRepository : IWeatherRepository {
                 val jsonObject = org.json.JSONObject(responseJson)
                 val snapshot = jsonObject.getLong("snapshot")
                 android.util.Log.d("WeatherRepository", "Rainbow snapshot success: $snapshot")
+
+                // Update caches
+                cachedSnapshot = snapshot
+                lastFetchTime = currentTime
+                context?.let { ctx ->
+                    ctx.getSharedPreferences("RainbowCachePrefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putLong("rainbow_snapshot", snapshot)
+                        .putLong("rainbow_fetch_time", currentTime)
+                        .apply()
+                }
+
                 snapshot
             } else {
                 android.util.Log.e("WeatherRepository", "Rainbow snapshot failed with HTTP code: $responseCode")
-                null
+                val fallback = getCachedSnapshotFallback()
+                if (fallback != null) {
+                    android.util.Log.w("WeatherRepository", "Falling back to expired cached snapshot: $fallback")
+                    fallback
+                } else {
+                    null
+                }
             }
         } catch (e: Exception) {
             android.util.Log.e("WeatherRepository", "Rainbow snapshot exception: ${e.message}", e)
-            null
+            val fallback = getCachedSnapshotFallback()
+            if (fallback != null) {
+                android.util.Log.w("WeatherRepository", "Exception occurred. Falling back to cached snapshot: $fallback")
+                fallback
+            } else {
+                null
+            }
         }
     }
 }

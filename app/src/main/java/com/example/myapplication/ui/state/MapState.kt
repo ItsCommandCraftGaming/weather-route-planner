@@ -19,6 +19,8 @@ import com.mapbox.api.directions.v5.DirectionsCriteria
 import com.mapbox.api.directions.v5.MapboxDirections
 import com.mapbox.api.directions.v5.models.DirectionsResponse
 import com.mapbox.api.directions.v5.models.RouteOptions
+import com.mapbox.geojson.Feature
+import com.mapbox.geojson.FeatureCollection
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.geojson.Polygon
@@ -39,7 +41,8 @@ data class TraseuInfo(
     val puncteVreme: List<AlertaMeteo>,
     val alerteNoapte: List<AlertaMeteo>,
     val factorMeteo: Double,
-    val scor: Double
+    val scor: Double,
+    val traficGeoJson: FeatureCollection? = null
 )
 
 class MapState(
@@ -177,9 +180,10 @@ class MapState(
         actualizeazaRainbowSnapshot()
         val routeOptions = RouteOptions.builder()
             .coordinatesList(listOf(start, final))
-            .profile(DirectionsCriteria.PROFILE_DRIVING)
+            .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
             .geometries(DirectionsCriteria.GEOMETRY_POLYLINE6)
             .overview(DirectionsCriteria.OVERVIEW_FULL)
+            .annotationsList(listOf(DirectionsCriteria.ANNOTATION_CONGESTION, DirectionsCriteria.ANNOTATION_DURATION))
             .alternatives(true)
             .build()
 
@@ -213,6 +217,36 @@ class MapState(
                                 val durationMin = durationSec / 60.0
                                 val scor = distanceKm + (factorMeteo * durationMin)
 
+                                val congestions = route.legs()?.flatMap { leg ->
+                                    leg.annotation()?.congestion() ?: emptyList()
+                                } ?: emptyList()
+
+                                val coords = lineString.coordinates()
+                                val trafficFeatures = mutableListOf<Feature>()
+
+                                if (congestions.isNotEmpty() && congestions.size == coords.size - 1) {
+                                    for (i in 0 until coords.size - 1) {
+                                        val segment = LineString.fromLngLats(listOf(coords[i], coords[i + 1]))
+                                        val feature = Feature.fromGeometry(segment)
+                                        val level = congestions[i]
+                                        val colorHex = when (level) {
+                                            "low" -> "#4CAF50"       // Verde - Trafic lejer
+                                            "moderate" -> "#FFC107"  // Galben - Trafic moderat
+                                            "heavy" -> "#FF5722"     // Portocaliu - Trafic intens
+                                            "severe" -> "#B71C1C"    // Roșu închis - Trafic foarte aglomerat
+                                            else -> "#2196F3"        // Albastru - Trafic necunoscut / normal
+                                        }
+                                        feature.addStringProperty("color", colorHex)
+                                        trafficFeatures.add(feature)
+                                    }
+                                } else {
+                                    val feature = Feature.fromGeometry(lineString)
+                                    feature.addStringProperty("color", "#2196F3")
+                                    trafficFeatures.add(feature)
+                                }
+
+                                val traficGeoJson = FeatureCollection.fromFeatures(trafficFeatures)
+
                                 TraseuInfo(
                                     index = index,
                                     geoJson = lineString,
@@ -221,7 +255,8 @@ class MapState(
                                     puncteVreme = puncteVreme,
                                     alerteNoapte = alerteNoapte,
                                     factorMeteo = factorMeteo,
-                                    scor = scor
+                                    scor = scor,
+                                    traficGeoJson = traficGeoJson
                                 )
                             }
                         }.awaitAll().filterNotNull()
