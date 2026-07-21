@@ -13,6 +13,9 @@ import com.example.myapplication.BuildConfig
 import com.example.myapplication.data.interfaces.*
 import com.example.myapplication.data.classes.*
 import com.example.myapplication.model.AlertaMeteo
+import com.example.myapplication.model.TomTomIncident
+import com.example.myapplication.data.interfaces.ITomTomIncidentRepository
+import com.example.myapplication.data.classes.TomTomIncidentRepositoryImpl
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.mapbox.api.directions.v5.DirectionsCriteria
@@ -24,6 +27,8 @@ import com.mapbox.geojson.FeatureCollection
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.geojson.Polygon
+import com.mapbox.turf.TurfConstants
+import com.mapbox.turf.TurfMeasurement
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
 import kotlinx.coroutines.*
@@ -53,7 +58,8 @@ class MapState(
     private val context: Context,
     val safeZoneManager: ISafeZoneManager = SafeZoneManagerImpl(),
     val drivingSimulator: IDrivingSimulator = DrivingSimulatorImpl(),
-    val routeWeatherScanner: IRouteWeatherScanner = RouteWeatherScannerImpl(weatherRepository)
+    val routeWeatherScanner: IRouteWeatherScanner = RouteWeatherScannerImpl(weatherRepository),
+    val tomTomRepository: ITomTomIncidentRepository = TomTomIncidentRepositoryImpl()
 ) {
     private val fusedLocationClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)
@@ -64,6 +70,8 @@ class MapState(
     var toateTraseele by mutableStateOf<List<TraseuInfo>>(emptyList())
     var indexTraseuSelectat by mutableStateOf(0)
     var rainbowSnapshotTimestamp by mutableStateOf<Long?>(null)
+    var toateIncidenteleTomTom by mutableStateOf<List<TomTomIncident>>(emptyList())
+    var incidenteTomTom by mutableStateOf<List<TomTomIncident>>(emptyList())
 
     init {
         actualizeazaRainbowSnapshot()
@@ -172,12 +180,14 @@ class MapState(
             puncteVremeTraseu = traseu.puncteVreme
             alerteNoapte = traseu.alerteNoapte
             alerteMeteo = traseu.puncteVreme.filter { it.tip != "Cer senin" && it.tip != "Nori parțiali" }
+            incidenteTomTom = filtreazaIncidentePeTraseu(toateIncidenteleTomTom, traseu.geoJson)
             drivingSimulator.stopDriving()
         }
     }
 
     fun calculeazaTraseu(start: Point, final: Point) {
         actualizeazaRainbowSnapshot()
+        incarcaIncidenteTomTom(start, final)
         val routeOptions = RouteOptions.builder()
             .coordinatesList(listOf(start, final))
             .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
@@ -353,6 +363,78 @@ class MapState(
         valoareScrubbingSecunde = 0.0
         puncteVremeTraseu = emptyList()
         activeRadarUrl = radarFrames.lastOrNull()?.url
+        incidenteTomTom = emptyList()
+    }
+
+    fun incarcaIncidenteTomTom(start: Point, final: Point) {
+        val apiKey = getTomTomApiKey()
+        if (apiKey.isBlank() || apiKey == "your_tomtom_api_key_here" || apiKey == "your_tomtom_api_key") {
+            android.util.Log.w("MapState", "TomTom API Key este lipsă sau invalidă în BuildConfig.")
+            return
+        }
+
+        scope.launch(Dispatchers.IO) {
+            val startIncidents = tomTomRepository.getIncidents(
+                start.latitude() - 0.15, start.longitude() - 0.15,
+                start.latitude() + 0.15, start.longitude() + 0.15,
+                apiKey
+            )
+
+            val finalIncidents = tomTomRepository.getIncidents(
+                final.latitude() - 0.15, final.longitude() - 0.15,
+                final.latitude() + 0.15, final.longitude() + 0.15,
+                apiKey
+            )
+
+            val minLat = minOf(start.latitude(), final.latitude()) - 0.1
+            val maxLat = maxOf(start.latitude(), final.latitude()) + 0.1
+            val minLon = minOf(start.longitude(), final.longitude()) - 0.1
+            val maxLon = maxOf(start.longitude(), final.longitude()) + 0.1
+
+            val routeIncidents = if ((maxLat - minLat) <= 0.6 && (maxLon - minLon) <= 0.6) {
+                tomTomRepository.getIncidents(minLat, minLon, maxLat, maxLon, apiKey)
+            } else {
+                emptyList()
+            }
+
+            val toateIncidentele = (startIncidents + finalIncidents + routeIncidents).distinctBy { it.id }
+
+            withContext(Dispatchers.Main) {
+                toateIncidenteleTomTom = toateIncidentele
+                val traseuCurent = toateTraseele.getOrNull(indexTraseuSelectat)?.geoJson
+                incidenteTomTom = filtreazaIncidentePeTraseu(toateIncidentele, traseuCurent)
+            }
+        }
+    }
+
+    fun filtreazaIncidentePeTraseu(incidente: List<TomTomIncident>, route: LineString?): List<TomTomIncident> {
+        if (route == null || incidente.isEmpty()) return emptyList()
+        val coords = route.coordinates()
+        if (coords.isEmpty()) return emptyList()
+
+        return incidente.filter { incident ->
+            var minDistanceMeters = Double.MAX_VALUE
+            for (coord in coords) {
+                val dist = TurfMeasurement.distance(incident.locatie, coord, TurfConstants.UNIT_METERS)
+                if (dist < minDistanceMeters) {
+                    minDistanceMeters = dist
+                }
+            }
+            minDistanceMeters <= 1500.0 // Doar incidentele aflate la maxim 1.5 km de linia traseului
+        }.sortedByDescending { it.intarziereSecunde }.take(8) // Se afiseaza doar cele mai importante maxim 8 incidente
+    }
+
+    private fun getTomTomApiKey(): String {
+        return try {
+            BuildConfig.TOMTOM_API_KEY
+        } catch (e: Throwable) {
+            try {
+                val field = BuildConfig::class.java.getField("TOMTOM_API_KEY")
+                field.get(null) as? String ?: ""
+            } catch (e2: Throwable) {
+                ""
+            }
+        }
     }
 }
 

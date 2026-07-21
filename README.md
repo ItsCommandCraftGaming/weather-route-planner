@@ -67,6 +67,7 @@ Pentru a rula proiectul pe dispozitivul propriu sau într-un emulator, ai nevoie
 MAPBOX_PUBLIC_TOKEN=pk.your_mapbox_public_token
 MAPBOX_SECRET_TOKEN=sk.your_mapbox_secret_token
 RAINBOW_API_KEY=your_rainbow_api_key
+TOMTOM_API_KEY=your_tomtom_api_key
 ```
 
 3. Deschide proiectul în Android Studio și rulează build-ul Gradle.

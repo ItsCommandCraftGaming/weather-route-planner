@@ -695,6 +695,39 @@ fun MapScreen(
                 }
             }
 
+            // Pin-uri Incidente TomTom
+            state.incidenteTomTom.forEach { incident ->
+                ViewAnnotation(
+                    options = viewAnnotationOptions {
+                        geometry(incident.locatie)
+                        allowOverlap(true)
+                    }
+                ) {
+                    val intarziereMin = incident.intarziereSecunde / 60
+                    val textAfisat = if (intarziereMin > 0) {
+                        "${incident.iconitaEmoji} ${incident.titlu} (+$intarziereMin min)"
+                    } else {
+                        "${incident.iconitaEmoji} ${incident.titlu}"
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable {
+                            Toast.makeText(context, "${incident.titlu}: ${incident.descriere}", Toast.LENGTH_LONG).show()
+                        }
+                    ) {
+                        Text(
+                            text = textAfisat,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .background(Color(0xFFD32F2F).copy(alpha = 0.9f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+
             // Pin intarziere secunde
             if (state.safeZoneManager.punctMijlocLinie != null) {
                 ViewAnnotation(
