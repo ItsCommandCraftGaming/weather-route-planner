@@ -6,9 +6,15 @@ O aplicație Android modernă, construită în **Kotlin** și **Jetpack Compose*
 
 ## 🚀 Caracteristici Principale
 
-### 🗺️ Rute Alternative Multiple
-* La căutarea unei destinații, aplicația solicită și afișează simultan până la **3 rute alternative** (Ruta Principală și Rutele Alternative 2 și 3).
-* Rutele sunt desenate pe hartă cu stiluri diferite: traseul selectat activ este colorat în **albastru** (linie groasă), iar traseele alternative sunt reprezentate cu linii mai subțiri de culoare **gri**.
+### 🗺️ Rute Alternative Multiple și Trafic în Timp Real
+* La căutarea unei destinații, aplicația solicită și afișează simultan până la **3 rute alternative** calculate cu profilul Mapbox **Driving-Traffic** (`PROFILE_DRIVING_TRAFFIC`).
+* **Durata călătoriei (ETA)** este ajustată automat în timp real în funcție de condițiile de trafic, aglomerație și eventuale întârzieri rutiere.
+* **Linia rutei este colorată dinamic pe segmente** conform adnotărilor de congestie (`ANNOTATION_CONGESTION`):
+  * 🟢 **Verde (`#4CAF50`):** Trafic fluid / liber
+  * 🟡 **Galben (`#FFC107`):** Trafic moderat
+  * 🟠 **Portocaliu (`#FF5722`):** Trafic aglomerat
+  * 🔴 **Roșu închis (`#B71C1C`):** Congestie severă
+* Traseul selectat are un contur stilizat cu bordură albastră pentru lizibilitate maximă, iar traseele alternative ne-selectate rămân reprezentate cu linii de culoare **gri**.
 
 ### 🌡️ Evaluarea Severității Meteo (Scor Inteligent)
 Fiecare rută primește un scor de cost calculat după formula:
