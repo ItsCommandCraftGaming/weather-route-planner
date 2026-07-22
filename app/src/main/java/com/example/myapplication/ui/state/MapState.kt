@@ -187,7 +187,6 @@ class MapState(
 
     fun calculeazaTraseu(start: Point, final: Point) {
         actualizeazaRainbowSnapshot()
-        incarcaIncidenteTomTom(start, final)
         val routeOptions = RouteOptions.builder()
             .coordinatesList(listOf(start, final))
             .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
@@ -277,6 +276,9 @@ class MapState(
                                 selecteazaTraseulDirect(0)
                             }
                         }
+
+                        val geometries = activeRoutesList.map { it.geoJson }
+                        incarcaIncidenteTomTom(geometries)
                     }
                 } else {
                     scope.launch(Dispatchers.Main) {
@@ -366,38 +368,115 @@ class MapState(
         incidenteTomTom = emptyList()
     }
 
-    fun incarcaIncidenteTomTom(start: Point, final: Point) {
+    class BBox(
+        var minLat: Double,
+        var minLon: Double,
+        var maxLat: Double,
+        var maxLon: Double
+    ) {
+        fun getAreaKm2(): Double {
+            val avgLat = (minLat + maxLat) / 2.0
+            val latHeight = (maxLat - minLat) * 111.0
+            val lonWidth = (maxLon - minLon) * 111.0 * java.lang.Math.cos(java.lang.Math.toRadians(avgLat))
+            return latHeight * lonWidth
+        }
+
+        fun addPoint(lat: Double, lon: Double) {
+            if (lat < minLat) minLat = lat
+            if (lat > maxLat) maxLat = lat
+            if (lon < minLon) minLon = lon
+            if (lon > maxLon) maxLon = lon
+        }
+
+        fun clone(): BBox {
+            return BBox(minLat, minLon, maxLat, maxLon)
+        }
+    }
+
+    private fun generateBBoxesForRoutes(routes: List<LineString>): List<BBox> {
+        val bboxes = mutableListOf<BBox>()
+        val padding = 0.05
+
+        for (route in routes) {
+            val coords = route.coordinates()
+            var i = 0
+            val n = coords.size
+            while (i < n) {
+                val coord = coords[i]
+
+                val covered = bboxes.any { bbox ->
+                    coord.latitude() >= bbox.minLat && coord.latitude() <= bbox.maxLat &&
+                    coord.longitude() >= bbox.minLon && coord.longitude() <= bbox.maxLon
+                }
+
+                if (covered) {
+                    i++
+                    continue
+                }
+
+                val bbox = BBox(
+                    minLat = coord.latitude() - padding,
+                    minLon = coord.longitude() - padding,
+                    maxLat = coord.latitude() + padding,
+                    maxLon = coord.longitude() + padding
+                )
+
+                var j = i + 1
+                while (j < n) {
+                    val pt = coords[j]
+                    val tempBBox = bbox.clone()
+                    tempBBox.addPoint(pt.latitude(), pt.longitude())
+
+                    val paddedBBox = BBox(
+                        minLat = tempBBox.minLat - padding,
+                        minLon = tempBBox.minLon - padding,
+                        maxLat = tempBBox.maxLat + padding,
+                        maxLon = tempBBox.maxLon + padding
+                    )
+
+                    if (paddedBBox.getAreaKm2() <= 9000.0) {
+                        bbox.minLat = tempBBox.minLat
+                        bbox.minLon = tempBBox.minLon
+                        bbox.maxLat = tempBBox.maxLat
+                        bbox.maxLon = tempBBox.maxLon
+                        j++
+                    } else {
+                        break
+                    }
+                }
+
+                bboxes.add(
+                    BBox(
+                        minLat = bbox.minLat - padding,
+                        minLon = bbox.minLon - padding,
+                        maxLat = bbox.maxLat + padding,
+                        maxLon = bbox.maxLon + padding
+                    )
+                )
+
+                i = if (j == i + 1) j else j - 1
+            }
+        }
+        return bboxes
+    }
+
+    fun incarcaIncidenteTomTom(rute: List<LineString>) {
         val apiKey = getTomTomApiKey()
         if (apiKey.isBlank() || apiKey == "your_tomtom_api_key_here" || apiKey == "your_tomtom_api_key") {
             android.util.Log.w("MapState", "TomTom API Key este lipsă sau invalidă în BuildConfig.")
             return
         }
 
+        if (rute.isEmpty()) return
+
         scope.launch(Dispatchers.IO) {
-            val startIncidents = tomTomRepository.getIncidents(
-                start.latitude() - 0.15, start.longitude() - 0.15,
-                start.latitude() + 0.15, start.longitude() + 0.15,
-                apiKey
-            )
-
-            val finalIncidents = tomTomRepository.getIncidents(
-                final.latitude() - 0.15, final.longitude() - 0.15,
-                final.latitude() + 0.15, final.longitude() + 0.15,
-                apiKey
-            )
-
-            val minLat = minOf(start.latitude(), final.latitude()) - 0.1
-            val maxLat = maxOf(start.latitude(), final.latitude()) + 0.1
-            val minLon = minOf(start.longitude(), final.longitude()) - 0.1
-            val maxLon = maxOf(start.longitude(), final.longitude()) + 0.1
-
-            val routeIncidents = if ((maxLat - minLat) <= 0.6 && (maxLon - minLon) <= 0.6) {
-                tomTomRepository.getIncidents(minLat, minLon, maxLat, maxLon, apiKey)
-            } else {
-                emptyList()
+            val bboxes = generateBBoxesForRoutes(rute)
+            val deferreds = bboxes.map { bbox ->
+                async(Dispatchers.IO) {
+                    tomTomRepository.getIncidents(bbox.minLat, bbox.minLon, bbox.maxLat, bbox.maxLon, apiKey)
+                }
             }
-
-            val toateIncidentele = (startIncidents + finalIncidents + routeIncidents).distinctBy { it.id }
+            val toateIncidentele = deferreds.awaitAll().flatten().distinctBy { it.id }
 
             withContext(Dispatchers.Main) {
                 toateIncidenteleTomTom = toateIncidentele
@@ -421,7 +500,7 @@ class MapState(
                 }
             }
             minDistanceMeters <= 1500.0 // Doar incidentele aflate la maxim 1.5 km de linia traseului
-        }.sortedByDescending { it.intarziereSecunde }.take(8) // Se afiseaza doar cele mai importante maxim 8 incidente
+        }.sortedByDescending { it.intarziereSecunde }.take(30) // Se afiseaza doar cele mai importante maxim 30 incidente
     }
 
     private fun getTomTomApiKey(): String {
