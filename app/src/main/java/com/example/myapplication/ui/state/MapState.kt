@@ -180,7 +180,15 @@ class MapState(
             puncteVremeTraseu = traseu.puncteVreme
             alerteNoapte = traseu.alerteNoapte
             alerteMeteo = traseu.puncteVreme.filter { it.tip != "Cer senin" && it.tip != "Nori parțiali" }
-            incidenteTomTom = filtreazaIncidentePeTraseu(toateIncidenteleTomTom, traseu.geoJson)
+            
+            // Run incident filtering in background to avoid freezing the UI thread
+            scope.launch(Dispatchers.Default) {
+                val filtrate = filtreazaIncidentePeTraseu(toateIncidenteleTomTom, traseu.geoJson)
+                withContext(Dispatchers.Main) {
+                    incidenteTomTom = filtrate
+                }
+            }
+            
             drivingSimulator.stopDriving()
         }
     }
@@ -478,10 +486,14 @@ class MapState(
             }
             val toateIncidentele = deferreds.awaitAll().flatten().distinctBy { it.id }
 
+            val filtrate = withContext(Dispatchers.Default) {
+                val traseuCurent = toateTraseele.getOrNull(indexTraseuSelectat)?.geoJson
+                filtreazaIncidentePeTraseu(toateIncidentele, traseuCurent)
+            }
+
             withContext(Dispatchers.Main) {
                 toateIncidenteleTomTom = toateIncidentele
-                val traseuCurent = toateTraseele.getOrNull(indexTraseuSelectat)?.geoJson
-                incidenteTomTom = filtreazaIncidentePeTraseu(toateIncidentele, traseuCurent)
+                incidenteTomTom = filtrate
             }
         }
     }
@@ -493,10 +505,22 @@ class MapState(
 
         return incidente.filter { incident ->
             var minDistanceMeters = Double.MAX_VALUE
+            val incidentLat = incident.locatie.latitude()
+            val incidentLon = incident.locatie.longitude()
+
             for (coord in coords) {
-                val dist = TurfMeasurement.distance(incident.locatie, coord, "meters")
-                if (dist < minDistanceMeters) {
-                    minDistanceMeters = dist
+                val coordLat = coord.latitude()
+                val coordLon = coord.longitude()
+
+                // Fast pre-filter (bounding-box approx. 2km):
+                // 0.02 deg lat ≈ 2.2km, 0.03 deg lon ≈ 2.3km
+                if (java.lang.Math.abs(incidentLat - coordLat) < 0.02 &&
+                    java.lang.Math.abs(incidentLon - coordLon) < 0.03) {
+                    
+                    val dist = TurfMeasurement.distance(incident.locatie, coord, "meters")
+                    if (dist < minDistanceMeters) {
+                        minDistanceMeters = dist
+                    }
                 }
             }
             minDistanceMeters <= 1500.0 // Doar incidentele aflate la maxim 1.5 km de linia traseului

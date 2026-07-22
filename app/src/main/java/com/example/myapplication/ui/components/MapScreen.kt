@@ -239,6 +239,15 @@ fun MapScreen(
     val currentZoom = state.mapViewportState.cameraState?.zoom ?: 0.0
     val isFlat = currentZoom >= 3.0
 
+    val incidenteFiltrateDupaZoom = remember(state.incidenteTomTom, currentZoom) {
+        when {
+            currentZoom < 7.5 -> emptyList()
+            currentZoom < 9.5 -> state.incidenteTomTom.take(5)
+            currentZoom < 11.5 -> state.incidenteTomTom.take(15)
+            else -> state.incidenteTomTom
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         MapboxMap(
             modifier = Modifier.fillMaxSize(),
@@ -696,7 +705,7 @@ fun MapScreen(
             }
 
             // Pin-uri Incidente TomTom cu Vector Icons (Fără Emoji, fără text încărcat)
-            state.incidenteTomTom.forEach { incident ->
+            incidenteFiltrateDupaZoom.forEach { incident ->
                 val (culoareCerc, iconita) = when (incident.titlu) {
                     "Accident rutier" -> Color(0xFFD32F2F) to Icons.Default.Warning
                     "Lucrări pe carosabil" -> Color(0xFFF57C00) to Icons.Default.Build
