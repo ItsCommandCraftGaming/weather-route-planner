@@ -1,4 +1,4 @@
-package com.example.myapplication.data.interfaces
+package com.example.myapplication.application.interfaces
 
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point

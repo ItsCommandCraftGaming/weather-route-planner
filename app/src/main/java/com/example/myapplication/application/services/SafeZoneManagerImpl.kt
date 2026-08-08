@@ -1,9 +1,9 @@
-package com.example.myapplication.data.classes
+package com.example.myapplication.application.services
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.example.myapplication.data.interfaces.ISafeZoneManager
+import com.example.myapplication.application.interfaces.ISafeZoneManager
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.turf.TurfConstants

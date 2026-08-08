@@ -1,12 +1,8 @@
-package com.example.myapplication.data.interfaces
+package com.example.myapplication.application.interfaces
 
-import com.example.myapplication.model.AlertaMeteo
+import com.example.myapplication.domain.entities.AlertaMeteo
+import com.example.myapplication.domain.entities.RadarFrame
 import com.mapbox.geojson.Point
-
-data class RadarFrame(
-    val time: Long,
-    val url: String
-)
 
 interface IWeatherRepository {
     suspend fun getRainViewerUrl(): String?

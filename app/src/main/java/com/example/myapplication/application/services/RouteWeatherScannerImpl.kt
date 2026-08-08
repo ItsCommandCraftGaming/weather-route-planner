@@ -1,8 +1,8 @@
-package com.example.myapplication.data.classes
+package com.example.myapplication.application.services
 
-import com.example.myapplication.data.interfaces.IRouteWeatherScanner
-import com.example.myapplication.data.interfaces.IWeatherRepository
-import com.example.myapplication.model.AlertaMeteo
+import com.example.myapplication.application.interfaces.IRouteWeatherScanner
+import com.example.myapplication.application.interfaces.IWeatherRepository
+import com.example.myapplication.domain.entities.AlertaMeteo
 import com.mapbox.geojson.LineString
 import com.mapbox.turf.TurfConstants
 import com.mapbox.turf.TurfMeasurement

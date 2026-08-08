@@ -6,10 +6,10 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.example.myapplication.data.classes.OpenMeteoWeatherRepository
-import com.example.myapplication.data.classes.SharedPrefsSearchHistoryRepository
+import com.example.myapplication.infrastructure.repositories.OpenMeteoWeatherRepository
+import com.example.myapplication.infrastructure.repositories.SharedPrefsSearchHistoryRepository
 import com.example.myapplication.ui.components.MapScreen
-import com.example.myapplication.ui.state.rememberMapState
+import com.example.myapplication.api.controllers.rememberMapState
 import com.mapbox.geojson.Point
 import com.mapbox.common.MapboxOptions
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState

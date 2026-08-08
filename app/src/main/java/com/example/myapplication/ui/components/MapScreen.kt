@@ -25,8 +25,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.example.myapplication.data.classes.SunCalculator
-import com.example.myapplication.ui.state.MapState
+import com.example.myapplication.application.services.SunCalculator
+import com.example.myapplication.api.controllers.MapState
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.maps.Style
@@ -53,7 +53,7 @@ import com.mapbox.maps.extension.style.sources.getSourceAs
 import com.mapbox.maps.viewannotation.annotationAnchor
 import kotlinx.coroutines.*
 import java.util.Locale
-import com.example.myapplication.model.AlertaMeteo
+import com.example.myapplication.domain.entities.AlertaMeteo
 
 fun getRepresentativeWeather(puncteVreme: List<AlertaMeteo>): String {
     if (puncteVreme.isEmpty()) return "Cer senin"

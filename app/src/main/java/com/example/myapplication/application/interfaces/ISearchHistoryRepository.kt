@@ -1,4 +1,4 @@
-package com.example.myapplication.data.interfaces
+package com.example.myapplication.application.interfaces
 
 interface ISearchHistoryRepository {
     fun getHistory(): List<String>

@@ -1,6 +1,6 @@
-package com.example.myapplication.data.interfaces
+package com.example.myapplication.application.interfaces
 
-import com.example.myapplication.model.AlertaMeteo
+import com.example.myapplication.domain.entities.AlertaMeteo
 import com.mapbox.geojson.LineString
 
 interface IRouteWeatherScanner {

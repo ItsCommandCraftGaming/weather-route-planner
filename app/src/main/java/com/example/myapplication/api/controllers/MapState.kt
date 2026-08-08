@@ -1,42 +1,37 @@
-package com.example.myapplication.ui.state
+package com.example.myapplication.api.controllers
 
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.location.Geocoder
 import android.widget.Toast
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.myapplication.BuildConfig
-import com.example.myapplication.data.interfaces.*
-import com.example.myapplication.data.classes.*
-import com.example.myapplication.model.AlertaMeteo
-import com.example.myapplication.model.TomTomIncident
-import com.example.myapplication.data.interfaces.ITomTomIncidentRepository
-import com.example.myapplication.data.classes.TomTomIncidentRepositoryImpl
+import com.example.myapplication.application.interfaces.*
+import com.example.myapplication.application.services.*
+import com.example.myapplication.domain.entities.AlertaMeteo
+import com.example.myapplication.domain.entities.RadarFrame
+import com.example.myapplication.domain.entities.TomTomIncident
+import com.example.myapplication.infrastructure.repositories.*
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
-import com.mapbox.api.directions.v5.DirectionsCriteria
-import com.mapbox.api.directions.v5.MapboxDirections
 import com.mapbox.api.directions.v5.models.DirectionsResponse
-import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.geojson.Feature
 import com.mapbox.geojson.FeatureCollection
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.geojson.Polygon
-import com.mapbox.turf.TurfConstants
-import com.mapbox.turf.TurfMeasurement
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.extension.compose.animation.viewport.MapViewportState
+import com.mapbox.turf.TurfConstants
+import com.mapbox.turf.TurfMeasurement
 import kotlinx.coroutines.*
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import java.util.Calendar
-import java.util.Locale
 
 data class TraseuInfo(
     val index: Int,
@@ -52,10 +47,12 @@ data class TraseuInfo(
 
 class MapState(
     val mapViewportState: MapViewportState,
+    private val context: Context,
     private val searchHistoryRepository: ISearchHistoryRepository,
     val weatherRepository: IWeatherRepository,
+    val routeRepository: IRouteRepository = MapboxRouteRepositoryImpl(),
+    val geocodingRepository: IGeocodingRepository = AndroidGeocodingRepositoryImpl(context),
     val scope: CoroutineScope,
-    private val context: Context,
     val safeZoneManager: ISafeZoneManager = SafeZoneManagerImpl(),
     val drivingSimulator: IDrivingSimulator = DrivingSimulatorImpl(),
     val routeWeatherScanner: IRouteWeatherScanner = RouteWeatherScannerImpl(weatherRepository),
@@ -195,21 +192,7 @@ class MapState(
 
     fun calculeazaTraseu(start: Point, final: Point) {
         actualizeazaRainbowSnapshot()
-        val routeOptions = RouteOptions.builder()
-            .coordinatesList(listOf(start, final))
-            .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
-            .geometries(DirectionsCriteria.GEOMETRY_POLYLINE6)
-            .overview(DirectionsCriteria.OVERVIEW_FULL)
-            .annotationsList(listOf(DirectionsCriteria.ANNOTATION_CONGESTION, DirectionsCriteria.ANNOTATION_DURATION))
-            .alternatives(true)
-            .build()
-
-        val client = MapboxDirections.builder()
-            .accessToken(MAPBOX_TOKEN)
-            .routeOptions(routeOptions)
-            .build()
-
-        client.enqueueCall(object : Callback<DirectionsResponse> {
+        routeRepository.getDirections(start, final, MAPBOX_TOKEN, object : Callback<DirectionsResponse> {
             override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
                 val routes = response.body()?.routes() ?: emptyList()
                 if (routes.isNotEmpty()) {
@@ -312,39 +295,32 @@ class MapState(
             istoricCautari = searchHistoryRepository.saveQuery(query)
 
             scope.launch(Dispatchers.IO) {
-                try {
-                    val geocoder = Geocoder(context, Locale.getDefault())
-                    val adrese = geocoder.getFromLocationName(query, 1)
+                val punctNou = geocodingRepository.searchLocation(query)
+                if (punctNou != null) {
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                            if (location != null) {
+                                val punctStart = Point.fromLngLat(location.longitude, location.latitude)
+                                calculeazaTraseu(punctStart, punctNou)
 
-                    if (!adrese.isNullOrEmpty()) {
-                        val locatieGasita = adrese[0]
-                        val punctNou = Point.fromLngLat(locatieGasita.longitude, locatieGasita.latitude)
-
-                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                                if (location != null) {
-                                    val punctStart = Point.fromLngLat(location.longitude, location.latitude)
-                                    calculeazaTraseu(punctStart, punctNou)
-
-                                    pozitiePin = punctNou
-                                    mapViewportState.setCameraOptions(
-                                        CameraOptions.Builder()
-                                            .center(punctNou)
-                                            .zoom(12.0)
-                                            .build()
-                                    )
-                                } else {
-                                    Toast.makeText(context, "Pornește GPS-ul din setări!", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        } else {
-                            // Run on Main Thread
-                            withContext(Dispatchers.Main) {
-                                permissionLauncher()
+                                pozitiePin = punctNou
+                                mapViewportState.setCameraOptions(
+                                    CameraOptions.Builder()
+                                        .center(punctNou)
+                                        .zoom(12.0)
+                                        .build()
+                                )
+                            } else {
+                                Toast.makeText(context, "Pornește GPS-ul din setări!", Toast.LENGTH_LONG).show()
                             }
                         }
+                    } else {
+                        // Run on Main Thread
+                        withContext(Dispatchers.Main) {
+                            permissionLauncher()
+                        }
                     }
-                } catch (e: Exception) {
+                } else {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(context, "Eroare la căutare", Toast.LENGTH_SHORT).show()
                     }
@@ -546,16 +522,20 @@ fun rememberMapState(
     mapViewportState: MapViewportState,
     searchHistoryRepository: ISearchHistoryRepository,
     weatherRepository: IWeatherRepository,
-    coroutineScope: CoroutineScope = rememberCoroutineScope(),
-    context: Context = LocalContext.current
+    context: Context = LocalContext.current,
+    routeRepository: IRouteRepository = remember { MapboxRouteRepositoryImpl() },
+    geocodingRepository: IGeocodingRepository = remember(context) { AndroidGeocodingRepositoryImpl(context) },
+    coroutineScope: CoroutineScope = rememberCoroutineScope()
 ): MapState {
-    return remember(mapViewportState, searchHistoryRepository, weatherRepository, coroutineScope, context) {
+    return remember(mapViewportState, searchHistoryRepository, weatherRepository, routeRepository, geocodingRepository, coroutineScope, context) {
         MapState(
             mapViewportState = mapViewportState,
+            context = context,
             searchHistoryRepository = searchHistoryRepository,
             weatherRepository = weatherRepository,
-            scope = coroutineScope,
-            context = context
+            routeRepository = routeRepository,
+            geocodingRepository = geocodingRepository,
+            scope = coroutineScope
         )
     }
 }

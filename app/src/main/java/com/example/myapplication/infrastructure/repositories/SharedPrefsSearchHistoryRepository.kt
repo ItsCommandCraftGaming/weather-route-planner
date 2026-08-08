@@ -1,7 +1,7 @@
-package com.example.myapplication.data.classes
+package com.example.myapplication.infrastructure.repositories
 
 import android.content.Context
-import com.example.myapplication.data.interfaces.ISearchHistoryRepository
+import com.example.myapplication.application.interfaces.ISearchHistoryRepository
 
 class SharedPrefsSearchHistoryRepository(private val context: Context) : ISearchHistoryRepository {
     private val prefs = context.getSharedPreferences("MapAppPrefs", Context.MODE_PRIVATE)

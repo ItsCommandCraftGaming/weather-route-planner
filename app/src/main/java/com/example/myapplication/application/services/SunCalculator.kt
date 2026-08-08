@@ -1,4 +1,4 @@
-package com.example.myapplication.data.classes
+package com.example.myapplication.application.services
 
 import com.mapbox.geojson.Point
 import com.mapbox.geojson.Polygon

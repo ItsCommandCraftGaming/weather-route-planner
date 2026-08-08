@@ -1,15 +1,15 @@
-package com.example.myapplication.data.classes
+package com.example.myapplication.infrastructure.repositories
 
 import android.util.Log
-import com.example.myapplication.data.interfaces.ITomTomIncidentRepository
-import com.example.myapplication.model.TomTomIncident
+import com.example.myapplication.application.interfaces.ITomTomIncidentRepository
+import com.example.myapplication.domain.entities.TomTomIncident
+import com.example.myapplication.infrastructure.api.TomTomApi
 import com.mapbox.geojson.Point
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.Locale
 
-class TomTomIncidentRepositoryImpl : ITomTomIncidentRepository {
+class TomTomIncidentRepositoryImpl(
+    private val tomTomApi: TomTomApi = TomTomApi()
+) : ITomTomIncidentRepository {
 
     override suspend fun getIncidents(
         minLat: Double,
@@ -25,30 +25,10 @@ class TomTomIncidentRepositoryImpl : ITomTomIncidentRepository {
         }
 
         return try {
-            val urlString = String.format(
-                Locale.US,
-                "https://api.tomtom.com/traffic/services/5/incidentDetails?key=%s&bbox=%.5f,%.5f,%.5f,%.5f&language=ro-RO",
-                cleanKey, minLon, minLat, maxLon, maxLat
-            )
+            Log.d("TomTomRepo", "Apelare TomTom Api...")
+            val responseText = tomTomApi.fetchIncidents(minLat, minLon, maxLat, maxLon, cleanKey)
+            if (responseText.isNullOrBlank()) return emptyList()
 
-            Log.d("TomTomRepo", "Apelare TomTom URL: $urlString")
-
-            val url = URL(urlString)
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"
-            conn.connectTimeout = 5000
-            conn.readTimeout = 5000
-
-            val responseCode = conn.responseCode
-            if (responseCode == 403) {
-                Log.e("TomTomRepo", "Eroare HTTP 403: Cheia API nu are autorizat serviciul Traffic API în consola TomTom.")
-                return emptyList()
-            } else if (responseCode != 200) {
-                Log.e("TomTomRepo", "TomTom API a returnat codul de eroare HTTP $responseCode")
-                return emptyList()
-            }
-
-            val responseText = conn.inputStream.bufferedReader().use { it.readText() }
             val root = JSONObject(responseText)
             val incidentsArray = root.optJSONArray("incidents") ?: return emptyList()
 

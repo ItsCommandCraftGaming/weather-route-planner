@@ -1,14 +1,21 @@
-package com.example.myapplication.data.classes
+package com.example.myapplication.infrastructure.repositories
 
-import com.example.myapplication.data.interfaces.IWeatherRepository
-import com.example.myapplication.data.interfaces.RadarFrame
-import com.example.myapplication.model.AlertaMeteo
-import com.mapbox.geojson.Point
 import android.content.Context
+import com.example.myapplication.application.interfaces.IWeatherRepository
+import com.example.myapplication.domain.entities.AlertaMeteo
+import com.example.myapplication.domain.entities.RadarFrame
+import com.example.myapplication.infrastructure.api.OpenMeteoApi
+import com.example.myapplication.infrastructure.api.RainViewerApi
+import com.example.myapplication.infrastructure.api.RainbowApi
+import com.mapbox.geojson.Point
 import org.json.JSONObject
-import java.net.URL
 
-class OpenMeteoWeatherRepository(private val context: Context? = null) : IWeatherRepository {
+class OpenMeteoWeatherRepository(
+    private val context: Context? = null,
+    private val openMeteoApi: OpenMeteoApi = OpenMeteoApi(),
+    private val rainViewerApi: RainViewerApi = RainViewerApi(),
+    private val rainbowApi: RainbowApi = RainbowApi()
+) : IWeatherRepository {
 
     private var cachedSnapshot: Long? = null
     private var lastFetchTime: Long = 0L
@@ -28,48 +35,19 @@ class OpenMeteoWeatherRepository(private val context: Context? = null) : IWeathe
     }
 
     override suspend fun getRainViewerUrl(): String? {
-        return try {
-            val responseJson = URL("https://api.rainviewer.com/public/weather-maps.json").readText()
-            val jsonObject = JSONObject(responseJson)
-            val host = jsonObject.getString("host")
-            val pastArray = jsonObject.getJSONObject("radar").getJSONArray("past")
-            val ultimulRadar = pastArray.getJSONObject(pastArray.length() - 1)
-            val pathCorect = ultimulRadar.getString("path")
-            "$host$pathCorect/256/{z}/{x}/{y}/2/1_1.png"
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
+        return rainViewerApi.fetchRainViewerUrl()
     }
 
     override suspend fun getRainViewerFrames(): List<RadarFrame> {
-        return try {
-            val responseJson = URL("https://api.rainviewer.com/public/weather-maps.json").readText()
-            val jsonObject = JSONObject(responseJson)
-            val host = jsonObject.getString("host")
-            val pastArray = jsonObject.getJSONObject("radar").getJSONArray("past")
-            
-            val list = mutableListOf<RadarFrame>()
-            for (i in 0 until pastArray.length()) {
-                val frameObj = pastArray.getJSONObject(i)
-                val time = frameObj.getLong("time")
-                val path = frameObj.getString("path")
-                val url = "$host$path/256/{z}/{x}/{y}/2/1_1.png"
-                list.add(RadarFrame(time, url))
-            }
-            list
-        } catch (e: Exception) {
-            e.printStackTrace()
-            emptyList()
-        }
+        val rawFrames = rainViewerApi.fetchRainViewerFrames()
+        return rawFrames.map { RadarFrame(it.first, it.second) }
     }
 
     override suspend fun checkWeatherForPoint(point: Point, timeMs: Long): AlertaMeteo? {
         val lat = point.latitude()
         val lon = point.longitude()
+        val response = openMeteoApi.fetchForecast(lat, lon) ?: return null
         return try {
-            val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&hourly=precipitation,snowfall,visibility,cloud_cover&timezone=GMT"
-            val response = URL(url).readText()
             val jsonObject = JSONObject(response)
             val hourly = jsonObject.getJSONObject("hourly")
 
@@ -145,17 +123,8 @@ class OpenMeteoWeatherRepository(private val context: Context? = null) : IWeathe
         }
 
         return try {
-            val url = URL("https://api.rainbow.ai/tiles/v1/snapshot?layer=precip")
-            val connection = url.openConnection() as java.net.HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.setRequestProperty("Ocp-Apim-Subscription-Key", apiKey)
-            connection.connect()
-
-            val responseCode = connection.responseCode
-            if (responseCode == 200) {
-                val responseJson = connection.inputStream.bufferedReader().use { it.readText() }
-                val jsonObject = org.json.JSONObject(responseJson)
-                val snapshot = jsonObject.getLong("snapshot")
+            val snapshot = rainbowApi.fetchRainbowSnapshot(apiKey)
+            if (snapshot != null) {
                 android.util.Log.d("WeatherRepository", "Rainbow snapshot success: $snapshot")
 
                 // Update caches
@@ -171,7 +140,6 @@ class OpenMeteoWeatherRepository(private val context: Context? = null) : IWeathe
 
                 snapshot
             } else {
-                android.util.Log.e("WeatherRepository", "Rainbow snapshot failed with HTTP code: $responseCode")
                 val fallback = getCachedSnapshotFallback()
                 if (fallback != null) {
                     android.util.Log.w("WeatherRepository", "Falling back to expired cached snapshot: $fallback")

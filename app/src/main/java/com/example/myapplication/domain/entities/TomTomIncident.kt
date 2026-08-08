@@ -1,4 +1,4 @@
-package com.example.myapplication.model
+package com.example.myapplication.domain.entities
 
 import com.mapbox.geojson.Point
 

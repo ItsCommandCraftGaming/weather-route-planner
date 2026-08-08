@@ -1,6 +1,6 @@
-package com.example.myapplication.data.interfaces
+package com.example.myapplication.application.interfaces
 
-import com.example.myapplication.model.TomTomIncident
+import com.example.myapplication.domain.entities.TomTomIncident
 
 interface ITomTomIncidentRepository {
     suspend fun getIncidents(
